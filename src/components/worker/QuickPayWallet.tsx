@@ -20,6 +20,8 @@ import {
   Sun,
   ChevronRight,
   ExternalLink,
+  Calendar,
+  Hash,
 } from 'lucide-react';
 import { WorkerProfile } from '../../types/kaamdost';
 import {
@@ -67,7 +69,7 @@ export const QuickPayWallet: React.FC<QuickPayWalletProps> = ({
   const [spendAmount, setSpendAmount] = useState<string>('350');
   const [spendTitle, setSpendTitle] = useState<string>('Brass Angle Valve & ISI Seal');
   const [spendCategory, setSpendCategory] = useState<WalletTransaction['category']>('MERCHANT_PURCHASE');
-  const [txFilter, setTxFilter] = useState<'ALL' | 'CREDITS' | 'SPENDS'>('ALL');
+  const [txFilter, setTxFilter] = useState<'All' | 'Credits' | 'Debits'>('All');
 
   // Sync wallet when worker or net take home changes
   useEffect(() => {
@@ -203,10 +205,21 @@ export const QuickPayWallet: React.FC<QuickPayWalletProps> = ({
   };
 
   const filteredTransactions = wallet.transactions.filter((tx) => {
-    if (txFilter === 'CREDITS') return tx.type === 'CREDIT';
-    if (txFilter === 'SPENDS') return tx.type === 'DEBIT';
+    if (txFilter === 'Credits') return tx.type === 'CREDIT';
+    if (txFilter === 'Debits') return tx.type === 'DEBIT';
     return true;
   });
+
+  const creditsCount = wallet.transactions.filter((tx) => tx.type === 'CREDIT').length;
+  const debitsCount = wallet.transactions.filter((tx) => tx.type === 'DEBIT').length;
+
+  const totalCredits = wallet.transactions
+    .filter((tx) => tx.type === 'CREDIT')
+    .reduce((acc, tx) => acc + tx.amount, 0);
+
+  const totalDebits = wallet.transactions
+    .filter((tx) => tx.type === 'DEBIT')
+    .reduce((acc, tx) => acc + tx.amount, 0);
 
   return (
     <div className="space-y-4">
@@ -332,83 +345,198 @@ export const QuickPayWallet: React.FC<QuickPayWalletProps> = ({
         </div>
       </div>
 
-      {/* 2. Recent Wallet Activity / Ledger */}
-      <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
+      {/* 2. Recent Credit and Debit Transactions / Scrollable Passbook */}
+      <div className="bg-white rounded-3xl p-5 border border-slate-200/80 shadow-xs space-y-3.5">
+        {/* Ledger Header with Financial Summary */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-slate-600" />
-            <h3 className="text-sm font-bold text-slate-900">
-              Wallet Passbook & Spends
-            </h3>
+            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-700 shrink-0">
+              <Clock className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 leading-none">
+                Recent Credit and Debit Transactions
+              </h3>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Scrollable ledger displaying Date, Job ID, and Amount for financial tracking
+              </p>
+            </div>
           </div>
 
-          {/* Filter Pills */}
-          <div className="flex items-center p-1 bg-slate-100 rounded-xl text-[10px] font-semibold">
+          {/* Tab-based Filter: All, Credits, Debits */}
+          <div
+            role="tablist"
+            aria-label="Filter transactions"
+            data-testid="transaction-tabs"
+            className="flex items-center p-1 bg-slate-100 rounded-2xl text-xs font-semibold self-start sm:self-auto border border-slate-200/60"
+          >
             <button
               type="button"
+              role="tab"
+              aria-selected={txFilter === 'All'}
+              data-testid="tab-all"
               onClick={() => {
                 triggerHaptic(20);
-                setTxFilter('ALL');
+                setTxFilter('All');
               }}
-              className={`px-2 py-0.5 rounded-lg transition ${
-                txFilter === 'ALL'
-                  ? 'bg-white text-slate-900 shadow-2xs font-bold'
-                  : 'text-slate-500 hover:text-slate-900'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                txFilter === 'All'
+                  ? 'bg-white text-slate-900 shadow-xs font-bold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              All
+              <span>All</span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                  txFilter === 'All'
+                    ? 'bg-slate-100 text-slate-700'
+                    : 'bg-slate-200/60 text-slate-500'
+                }`}
+              >
+                {wallet.transactions.length}
+              </span>
             </button>
+
             <button
               type="button"
+              role="tab"
+              aria-selected={txFilter === 'Credits'}
+              data-testid="tab-credits"
               onClick={() => {
                 triggerHaptic(20);
-                setTxFilter('CREDITS');
+                setTxFilter('Credits');
               }}
-              className={`px-2 py-0.5 rounded-lg transition ${
-                txFilter === 'CREDITS'
-                  ? 'bg-white text-emerald-700 shadow-2xs font-bold'
-                  : 'text-slate-500 hover:text-slate-900'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                txFilter === 'Credits'
+                  ? 'bg-white text-emerald-700 shadow-xs font-bold ring-1 ring-emerald-500/20'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              Credits
+              <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Credits</span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                  txFilter === 'Credits'
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'bg-slate-200/60 text-slate-500'
+                }`}
+              >
+                {creditsCount}
+              </span>
             </button>
+
             <button
               type="button"
+              role="tab"
+              aria-selected={txFilter === 'Debits'}
+              data-testid="tab-debits"
               onClick={() => {
                 triggerHaptic(20);
-                setTxFilter('SPENDS');
+                setTxFilter('Debits');
               }}
-              className={`px-2 py-0.5 rounded-lg transition ${
-                txFilter === 'SPENDS'
-                  ? 'bg-white text-rose-700 shadow-2xs font-bold'
-                  : 'text-slate-500 hover:text-slate-900'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition cursor-pointer ${
+                txFilter === 'Debits'
+                  ? 'bg-white text-rose-700 shadow-xs font-bold ring-1 ring-rose-500/20'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
               }`}
             >
-              Spends
+              <ArrowUpRight className="w-3.5 h-3.5 text-rose-600" />
+              <span>Debits</span>
+              <span
+                className={`text-[10px] font-mono px-1.5 py-0.2 rounded-full ${
+                  txFilter === 'Debits'
+                    ? 'bg-rose-50 text-rose-700'
+                    : 'bg-slate-200/60 text-slate-500'
+                }`}
+              >
+                {debitsCount}
+              </span>
             </button>
           </div>
         </div>
 
-        {/* Transactions List */}
-        <div className="space-y-2 pt-1 max-h-72 overflow-y-auto pr-1">
+        {/* Financial Flow Summary Bar (Inflow vs Outflow) */}
+        <div className="grid grid-cols-2 gap-2 p-2.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs">
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic(20);
+              setTxFilter('Credits');
+            }}
+            className={`flex items-center gap-2 p-1 rounded-xl transition text-left cursor-pointer ${
+              txFilter === 'Credits' ? 'bg-emerald-100/50 ring-1 ring-emerald-300/60' : 'hover:bg-white'
+            }`}
+          >
+            <div className="w-6 h-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+              <ArrowDownLeft className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 block leading-tight">Total Inflow (Credits)</span>
+              <span className="font-extrabold text-emerald-600 tabular-nums text-xs">
+                +₹{totalCredits.toLocaleString('en-IN')}
+              </span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic(20);
+              setTxFilter('Debits');
+            }}
+            className={`flex items-center gap-2 p-1 rounded-xl transition text-left cursor-pointer border-l border-slate-200 pl-3 ${
+              txFilter === 'Debits' ? 'bg-rose-100/50 ring-1 ring-rose-300/60' : 'hover:bg-white'
+            }`}
+          >
+            <div className="w-6 h-6 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0">
+              <ArrowUpRight className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 block leading-tight">Total Outflow (Debits)</span>
+              <span className="font-extrabold text-slate-800 tabular-nums text-xs">
+                -₹{totalDebits.toLocaleString('en-IN')}
+              </span>
+            </div>
+          </button>
+        </div>
+
+        {/* Column Guide Header */}
+        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          <span>Job ID & Details</span>
+          <div className="flex items-center gap-6">
+            <span>Date & Time</span>
+            <span>Amount (₹)</span>
+          </div>
+        </div>
+
+        {/* Scrollable Transactions List with Date, Job ID, and Amount */}
+        <div
+          data-testid="recent-transactions-list"
+          className="space-y-2 pt-1 max-h-80 overflow-y-auto pr-1 no-scrollbar divide-y divide-slate-100"
+        >
           {filteredTransactions.length === 0 ? (
-            <div className="py-6 text-center text-xs text-slate-400">
-              No transactions in this category yet.
+            <div className="py-8 text-center text-xs text-slate-400 space-y-1">
+              <p className="font-semibold text-slate-600">No transactions recorded</p>
+              <p className="text-[11px]">No activity matches the &quot;{txFilter.toLowerCase()}&quot; filter.</p>
             </div>
           ) : (
             filteredTransactions.map((tx) => {
               const isCredit = tx.type === 'CREDIT';
+              const jobIdMatch = (tx.subtitle + ' ' + tx.title).match(/#(KD-\d+)|(KD-\d+)/i);
+              const jobId = tx.jobId || jobIdMatch?.[1] || jobIdMatch?.[2] || 'KD-WALLET';
+
               return (
                 <div
                   key={tx.id}
-                  className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/80 hover:bg-slate-100/80 border border-slate-100 transition text-xs"
+                  data-testid="transaction-item"
+                  className="pt-2.5 pb-1 first:pt-0 flex items-start justify-between gap-3 text-xs group"
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
                     <div
-                      className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 ${
+                      className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 mt-0.5 ${
                         isCredit
-                          ? 'bg-emerald-500/10 text-emerald-600 border border-emerald-500/20'
-                          : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                          ? 'bg-emerald-50 text-emerald-600 border border-emerald-200/60'
+                          : 'bg-rose-50 text-rose-600 border border-rose-200/60'
                       }`}
                     >
                       {isCredit ? (
@@ -417,36 +545,96 @@ export const QuickPayWallet: React.FC<QuickPayWalletProps> = ({
                         <ArrowUpRight className="w-4 h-4" />
                       )}
                     </div>
-                    <div>
-                      <h4 className="font-bold text-slate-900 leading-tight">
-                        {tx.title}
-                      </h4>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
-                        {tx.subtitle} · {tx.time}
-                      </p>
+
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-bold text-slate-900 leading-snug truncate">
+                          {tx.title}
+                        </h4>
+                        <span
+                          className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded border ${
+                            isCredit
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-rose-50 text-rose-700 border-rose-200'
+                          }`}
+                        >
+                          {isCredit ? 'Credit' : 'Debit'}
+                        </span>
+                        <span
+                          data-testid="transaction-job-id"
+                          className="inline-flex items-center gap-1 font-mono font-bold text-[10px] text-blue-700 bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md"
+                        >
+                          <span className="text-slate-400 font-medium">Job ID:</span>
+                          <span>{jobId.replace(/^#/, '')}</span>
+                        </span>
+                      </div>
+
+                      {/* Explicit Metadata: Date, Time, Subtitle */}
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 flex-wrap">
+                        {/* Date & Time */}
+                        <span
+                          data-testid="transaction-date"
+                          className="flex items-center gap-1 text-slate-700 font-medium bg-slate-100/80 px-1.5 py-0.5 rounded"
+                        >
+                          <Calendar className="w-3 h-3 text-slate-500" />
+                          <span className="text-slate-400 text-[10px]">Date:</span>
+                          <span>{tx.date}</span>
+                          <span className="text-slate-300">·</span>
+                          <span className="text-slate-500">{tx.time}</span>
+                        </span>
+
+                        {/* Category or Subtitle without redundant Job ID */}
+                        {tx.subtitle && (
+                          <>
+                            <span className="text-slate-300" aria-hidden="true">·</span>
+                            <span className="text-slate-500 truncate max-w-[150px]">
+                              {tx.subtitle.replace(/Booking #KD-\d+ ·?|Booking #KD-\d+/i, '').trim() || tx.subtitle}
+                            </span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
 
+                  {/* Amount & Balance Column */}
                   <div className="text-right shrink-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                      Amount
+                    </span>
                     <span
+                      data-testid="transaction-amount"
                       className={`font-extrabold text-sm tabular-nums block ${
                         isCredit ? 'text-emerald-600' : 'text-slate-900'
                       }`}
                     >
                       {isCredit ? '+' : '-'}₹{tx.amount.toLocaleString('en-IN')}
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      {tx.status === 'PENDING_OFFLINE_SYNC' ? (
-                        <span className="text-amber-600 font-medium">Offline Cached</span>
-                      ) : (
-                        tx.referenceId
-                      )}
+                    <span className="text-[10px] text-slate-400 font-mono block mt-0.5">
+                      Bal: ₹{tx.balanceAfter.toLocaleString('en-IN')}
                     </span>
+                    {tx.status === 'PENDING_OFFLINE_SYNC' ? (
+                      <span className="inline-block mt-0.5 text-[9px] font-bold text-amber-700 bg-amber-50 px-1 py-0.2 rounded border border-amber-200">
+                        Offline Sync
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-slate-400 font-mono block">
+                        {tx.referenceId}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
             })
           )}
+        </div>
+
+        {/* Scrollable Indicator Footer */}
+        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400">
+          <span>Showing {filteredTransactions.length} of {wallet.transactions.length} transactions</span>
+          <span className="flex items-center gap-1 text-emerald-600 font-semibold">
+            <CheckCircle2 className="w-3 h-3" />
+            <span>Instant Reconciliation</span>
+          </span>
         </div>
       </div>
 

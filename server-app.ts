@@ -38,8 +38,8 @@ server.on('upgrade', (request, socket, head) => {
   const url = request.url || '';
   const pathname = url.split('?')[0];
 
-  // Route KaamDost real-time bus connections
-  if (pathname === '/ws' || pathname === '/api/ws' || pathname === '/') {
+  // Route KaamDost real-time bus connections strictly under /ws
+  if (pathname === '/ws') {
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit('connection', ws, request);
     });
@@ -99,8 +99,19 @@ app.post('/api/bookings', (req, res) => {
 app.patch('/api/bookings/:id/status', (req, res) => {
   const { id } = req.params;
   const { status } = req.body as { status: BookingStatus };
+  const target = bookings.find((b) => b.id === id);
+
+  // Atomic Acceptance check: prevent double acceptance race conditions
+  if (status === 'ACCEPTED' && target && target.status !== 'REQUESTED') {
+    return res.status(409).json({
+      success: false,
+      error: 'ALREADY_ACCEPTED',
+      message: `Booking #${id} was already accepted by another partner.`,
+    });
+  }
+
   bookings = bookings.map((b) => (b.id === id ? { ...b, status } : b));
-  broadcast('booking:updated', { id, status });
+  broadcast('booking:status', { bookingId: id, status });
   res.json({ success: true });
 });
 
@@ -162,18 +173,35 @@ wss.on('connection', (ws) => {
         }
 
         case 'booking:status': {
-          const { bookingId, status } = payload;
-          bookings = bookings.map((b) =>
-            b.id === bookingId ? { ...b, status } : b
-          );
-          broadcast('booking:status', { bookingId, status });
-
+          const { bookingId, status, workerId } = payload;
           const target = bookings.find((b) => b.id === bookingId);
+
+          // Atomic Acceptance check: prevent double acceptance race conditions
+          if (status === 'ACCEPTED' && target && target.status !== 'REQUESTED') {
+            ws.send(
+              JSON.stringify({
+                type: 'booking:already_accepted',
+                payload: {
+                  bookingId,
+                  message: `Job #${bookingId} was already accepted by another partner.`,
+                  currentStatus: target.status,
+                },
+              })
+            );
+            break;
+          }
+
+          bookings = bookings.map((b) =>
+            b.id === bookingId ? { ...b, status, ...(workerId ? { workerId } : {}) } : b
+          );
+          broadcast('booking:status', { bookingId, status, workerId });
+
+          const updatedTarget = bookings.find((b) => b.id === bookingId);
           const notif: AppNotification = {
             id: `notif-${Date.now()}`,
             recipient: 'CUSTOMER',
             title: `Service Status: ${status.replace('_', ' ')}`,
-            body: `Booking #${bookingId} (${target?.serviceTitle || 'Home Service'}) is now ${status.replace('_', ' ')}.`,
+            body: `Booking #${bookingId} (${updatedTarget?.serviceTitle || 'Home Service'}) is now ${status.replace('_', ' ')}.`,
             time: 'Just now',
             read: false,
             type: 'BOOKING',
@@ -426,18 +454,29 @@ async function startServer() {
     });
   }
 
-  // Dev server must run on port 3000 in AI Studio environment
-  // Nginx reverse proxy listens on 8080 and forwards to localhost:3000
-  const args = process.argv.slice(2);
-  const portIdx = args.indexOf('--port');
-  const cliPort = portIdx !== -1 && args[portIdx + 1] ? parseInt(args[portIdx + 1], 10) : NaN;
-  const PORT = !isNaN(cliPort) && cliPort !== 8080 ? cliPort : 3000;
+  // Dev server must run strictly on port 3000 in AI Studio environment.
+  // Nginx reverse proxy listens on 8080 and forwards to localhost:3000.
+  // Never attempt to bind to process.env.PORT if it is 8080 (which collides with Nginx).
+  const PORT = 3000;
 
-  const hostIdx = args.indexOf('--host');
-  const HOST = hostIdx !== -1 && args[hostIdx + 1] ? args[hostIdx + 1] : '0.0.0.0';
+  // Bind Express/Vite app strictly to port 3000 using dual-stack IPv4/IPv6 '::'
+  // (or fallback '0.0.0.0') so both localhost and 127.0.0.1 resolve without ECONNREFUSED from Nginx proxy
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`[Server] Port ${PORT} already in use. Exiting for clean restart.`, err);
+      process.exit(1);
+    } else if (err.code === 'EAFNOSUPPORT' || err.code === 'EADDRNOTAVAIL') {
+      console.warn(`[Server] Dual-stack IPv6 '::' not supported, falling back to '0.0.0.0':${PORT}`);
+      server.listen(PORT, '0.0.0.0', () => {
+        console.log(`KaamDost full-stack server running with WebSocket on 0.0.0.0:${PORT}`);
+      });
+    } else {
+      console.error('[Server] Unexpected server error:', err);
+    }
+  });
 
-  server.listen(PORT, HOST, () => {
-    console.log(`KaamDost full-stack server running with WebSocket on ${HOST}:${PORT}`);
+  server.listen(PORT, '::', () => {
+    console.log(`KaamDost full-stack server running with WebSocket on [::]:${PORT} (dual-stack)`);
   });
 }
 

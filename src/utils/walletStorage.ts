@@ -28,6 +28,7 @@ export interface WalletTransaction {
   category: TransactionCategory;
   title: string;
   subtitle: string;
+  jobId?: string;
   amount: number;
   timestamp: number;
   date: string;
@@ -82,9 +83,10 @@ function createInitialWalletData(
       category: 'COMMISSION',
       title: 'Kitchen Diverter & Mixer Commission',
       subtitle: '90% Service Payout · Booking #KD-84920',
+      jobId: 'KD-84920',
       amount: 450,
-      timestamp: now - 3600000 * 5,
-      date: 'Today',
+      timestamp: now - 3600000 * 3,
+      date: 'Today, 29 Sep',
       time: '01:15 PM',
       status: 'COMPLETED',
       referenceId: 'UPI-CR-892104',
@@ -97,9 +99,10 @@ function createInitialWalletData(
       category: 'INCENTIVE',
       title: 'Peak-Hour Punctuality Bonus',
       subtitle: 'Arrived within 15 mins in Indiranagar Zone',
+      jobId: 'KD-84920',
       amount: 200,
       timestamp: now - 3600000 * 4,
-      date: 'Today',
+      date: 'Today, 29 Sep',
       time: '02:30 PM',
       status: 'COMPLETED',
       referenceId: 'BONUS-PK-1029',
@@ -112,10 +115,11 @@ function createInitialWalletData(
       category: 'TIP',
       title: 'Customer Appreciation Tip',
       subtitle: 'Rated 5.0★ by Pooja Hegde',
+      jobId: 'KD-84905',
       amount: 150,
-      timestamp: now - 3600000 * 2,
-      date: 'Today',
-      time: '04:10 PM',
+      timestamp: now - 3600000 * 6,
+      date: 'Today, 29 Sep',
+      time: '11:40 AM',
       status: 'COMPLETED',
       referenceId: 'TIP-CUST-4910',
       receiptCode: 'RCP-KD-4821',
@@ -127,10 +131,11 @@ function createInitialWalletData(
       category: 'MERCHANT_PURCHASE',
       title: 'Sri Balaji Hardware & Electricals',
       subtitle: 'Quick Pay QR · Brass Valve & Teflon Seal',
+      jobId: 'KD-84920',
       amount: 280,
-      timestamp: now - 3600000 * 1,
-      date: 'Today',
-      time: '05:45 PM',
+      timestamp: now - 3600000 * 8,
+      date: 'Today, 29 Sep',
+      time: '09:25 AM',
       status: 'COMPLETED',
       referenceId: 'QR-MERCH-8192',
       receiptCode: 'RCP-QR-9012',
@@ -142,14 +147,63 @@ function createInitialWalletData(
       category: 'COMMISSION',
       title: 'Overhead Tank Ball Cock Repair',
       subtitle: '90% Service Payout · Booking #KD-85012',
+      jobId: 'KD-85012',
       amount: 720,
-      timestamp: now - 3600000 * 0.5,
-      date: 'Today',
+      timestamp: now - 86400000,
+      date: 'Yesterday, 28 Sep',
       time: '06:15 PM',
       status: 'COMPLETED',
       referenceId: 'UPI-CR-904128',
       receiptCode: 'RCP-KD-4822',
-      balanceAfter: total,
+      balanceAfter: total - 1080,
+    },
+    {
+      id: `tx-init-6`,
+      type: 'DEBIT',
+      category: 'UPI_WITHDRAWAL',
+      title: 'Instant Bank Payout to HDFC Account',
+      subtitle: 'IMPS Direct Transfer · Acc ****4821',
+      jobId: 'KD-84880',
+      amount: 1200,
+      timestamp: now - 86400000 * 1.5,
+      date: 'Yesterday, 28 Sep',
+      time: '02:00 PM',
+      status: 'COMPLETED',
+      referenceId: 'WDR-HDFC-91023',
+      receiptCode: 'RCP-WDR-8812',
+      balanceAfter: total - 1800,
+    },
+    {
+      id: `tx-init-7`,
+      type: 'CREDIT',
+      category: 'COMMISSION',
+      title: 'Quarter-Turn Tap Cartridge Replacement',
+      subtitle: '90% Service Payout · Booking #KD-84750',
+      jobId: 'KD-84750',
+      amount: 380,
+      timestamp: now - 86400000 * 2,
+      date: '27 Sep 2026',
+      time: '04:30 PM',
+      status: 'COMPLETED',
+      referenceId: 'UPI-CR-891024',
+      receiptCode: 'RCP-KD-4815',
+      balanceAfter: total - 600,
+    },
+    {
+      id: `tx-init-8`,
+      type: 'CREDIT',
+      category: 'COMMISSION',
+      title: 'Under-Sink Drain Pipe Leak Fix',
+      subtitle: '90% Service Payout · Booking #KD-84620',
+      jobId: 'KD-84620',
+      amount: 320,
+      timestamp: now - 86400000 * 3,
+      date: '26 Sep 2026',
+      time: '11:15 AM',
+      status: 'COMPLETED',
+      referenceId: 'UPI-CR-887102',
+      receiptCode: 'RCP-KD-4809',
+      balanceAfter: total - 980,
     },
   ];
 
@@ -231,7 +285,8 @@ export function processWalletSpend(
   amount: number,
   title: string,
   category: TransactionCategory = 'MERCHANT_PURCHASE',
-  isOffline: boolean = false
+  isOffline: boolean = false,
+  jobId?: string
 ): {
   success: boolean;
   error?: string;
@@ -271,9 +326,10 @@ export function processWalletSpend(
     subtitle: isOffline
       ? 'Offline Quick Pay QR · Stored in Service Cache'
       : 'Quick Pay · Instant Settlement',
+    jobId,
     amount,
     timestamp: now,
-    date: 'Today',
+    date: 'Today, 29 Sep',
     time: timeStr,
     status: isOffline ? 'PENDING_OFFLINE_SYNC' : 'COMPLETED',
     referenceId: `QP-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -299,7 +355,8 @@ export function processWalletDeposit(
   amount: number,
   title: string,
   category: 'COMMISSION' | 'INCENTIVE' | 'TIP' = 'COMMISSION',
-  subtitle?: string
+  subtitle?: string,
+  jobId?: string
 ): { newBalance: number; transaction: WalletTransaction } {
   const wallet = getWalletData(workerId);
   const now = Date.now();
@@ -312,9 +369,10 @@ export function processWalletDeposit(
     category,
     title,
     subtitle: subtitle || 'Service Payout Credited',
+    jobId,
     amount,
     timestamp: now,
-    date: 'Today',
+    date: 'Today, 29 Sep',
     time: timeStr,
     status: 'COMPLETED',
     referenceId: `CR-${Math.floor(100000 + Math.random() * 900000)}`,

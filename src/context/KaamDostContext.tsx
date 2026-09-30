@@ -294,6 +294,17 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
               break;
             }
 
+            case 'booking:already_accepted': {
+              const { bookingId, message } = payload;
+              showToast(
+                'Job Already Accepted',
+                message || `Booking #${bookingId} was already accepted by another technician.`,
+                'warning'
+              );
+              triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
+              break;
+            }
+
             case 'extra:requested': {
               const { bookingId, extraItem } = payload;
               setBookings((prev) =>

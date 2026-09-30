@@ -51,46 +51,60 @@ const KaamDostShell: React.FC = () => {
   const [viewMode, setViewMode] = useState<ViewMode>(getInitialViewMode);
   const [showStateBar, setShowStateBar] = useState<boolean>(false);
 
+  const changeViewMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    try {
+      const url = new URL(window.location.href);
+      if (mode === 'CUSTOMER') url.searchParams.set('role', 'customer');
+      else if (mode === 'WORKER') url.searchParams.set('role', 'worker');
+      else url.searchParams.set('role', 'dual');
+      window.history.replaceState({}, '', url.toString());
+    } catch {
+      // safe fallback
+    }
+  };
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setViewMode(getInitialViewMode());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#F1F5F9] text-[#0F172A] flex flex-col">
       {/* 3-Zone Top Bar */}
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
         {/* Zone 1: Brand Wordmark + WebSocket Live Status Indicator */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <a
             href="#top"
             onClick={(e) => {
               e.preventDefault();
-              setViewMode('CUSTOMER');
+              changeViewMode('CUSTOMER');
             }}
-            className="text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap"
+            className="text-lg font-extrabold tracking-tight text-slate-900 whitespace-nowrap hover:text-blue-600 transition"
           >
             KaamDost
           </a>
-          <span
+          <div
             title={
               isConnectedWs
                 ? 'WebSocket Real-Time Bus Connected'
                 : 'Connecting to Real-Time Bus...'
             }
-            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 ${
-              isConnectedWs
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                : 'bg-amber-50 text-amber-700 border border-amber-200'
-            }`}
+            className="flex items-center gap-1.5 text-xs"
           >
-            {isConnectedWs ? (
-              <>
-                <Wifi className="w-3 h-3 text-emerald-600" />
-                <span>WS Live</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-3 h-3 text-amber-600 animate-pulse" />
-                <span>WS Syncing</span>
-              </>
-            )}
-          </span>
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isConnectedWs ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+              }`}
+            />
+            <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">
+              {isConnectedWs ? 'Live Sync' : 'Syncing...'}
+            </span>
+          </div>
         </div>
 
         {/* Zone 2: Navigation / App Switcher */}
@@ -100,7 +114,7 @@ const KaamDostShell: React.FC = () => {
         >
           <button
             type="button"
-            onClick={() => setViewMode('CUSTOMER')}
+            onClick={() => changeViewMode('CUSTOMER')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               viewMode === 'CUSTOMER'
                 ? 'bg-white text-blue-600 shadow-2xs'
@@ -113,7 +127,7 @@ const KaamDostShell: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setViewMode('WORKER')}
+            onClick={() => changeViewMode('WORKER')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               viewMode === 'WORKER'
                 ? 'bg-[#0F172A] text-amber-400 shadow-2xs'
@@ -126,7 +140,7 @@ const KaamDostShell: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setViewMode('DUAL_SYNC')}
+            onClick={() => changeViewMode('DUAL_SYNC')}
             className={`hidden md:flex px-3 py-1.5 rounded-lg text-xs font-bold transition-colors items-center gap-1.5 whitespace-nowrap cursor-pointer ${
               viewMode === 'DUAL_SYNC'
                 ? 'bg-blue-600 text-white shadow-2xs'
@@ -199,13 +213,13 @@ const KaamDostShell: React.FC = () => {
       <main className="flex-1 w-full max-w-[1360px] mx-auto sm:py-6 sm:px-4 flex justify-center items-start">
         {viewMode === 'CUSTOMER' && (
           <div className="w-full max-w-[428px] bg-[#F7F9FD] sm:rounded-[44px] sm:shadow-2xl sm:border-[8px] sm:border-slate-900 overflow-hidden">
-            <CustomerApp onSwitchToWorkerApp={() => setViewMode('WORKER')} />
+            <CustomerApp onSwitchToWorkerApp={() => changeViewMode('WORKER')} />
           </div>
         )}
 
         {viewMode === 'WORKER' && (
           <div className="w-full max-w-[428px] bg-[#F7F9FD] sm:rounded-[44px] sm:shadow-2xl sm:border-[8px] sm:border-slate-900 overflow-hidden">
-            <WorkerApp onSwitchToCustomerApp={() => setViewMode('CUSTOMER')} />
+            <WorkerApp onSwitchToCustomerApp={() => changeViewMode('CUSTOMER')} />
           </div>
         )}
 
@@ -220,13 +234,14 @@ const KaamDostShell: React.FC = () => {
                     Customer App (Alex Carter)
                   </span>
                 </div>
-                <span className="text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                  WebSocket Connected
+                <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  WebSocket Live
                 </span>
               </div>
               <div className="w-full bg-[#F7F9FD] sm:rounded-[44px] sm:shadow-2xl sm:border-[8px] sm:border-slate-900 overflow-hidden">
                 <CustomerApp
-                  onSwitchToWorkerApp={() => setViewMode('WORKER')}
+                  onSwitchToWorkerApp={() => changeViewMode('WORKER')}
                 />
               </div>
             </div>
@@ -240,13 +255,14 @@ const KaamDostShell: React.FC = () => {
                     Worker App (Daniel Walker)
                   </span>
                 </div>
-                <span className="text-[11px] font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                <span className="text-[11px] font-semibold text-amber-600 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                   Real-Time Dispatch
                 </span>
               </div>
               <div className="w-full bg-[#F7F9FD] sm:rounded-[44px] sm:shadow-2xl sm:border-[8px] sm:border-slate-900 overflow-hidden">
                 <WorkerApp
-                  onSwitchToCustomerApp={() => setViewMode('CUSTOMER')}
+                  onSwitchToCustomerApp={() => changeViewMode('CUSTOMER')}
                 />
               </div>
             </div>
