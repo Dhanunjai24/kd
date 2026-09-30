@@ -14,6 +14,8 @@ import {
   INITIAL_NOTIFICATIONS,
   BENGALURU_LOCATIONS,
 } from '../data/initialData';
+import { triggerHaptic, HAPTIC_PATTERNS } from '../utils/haptics';
+import { isTopRecommended100Match } from '../utils/jobRanking';
 
 export interface ToastItem {
   id: string;
@@ -46,6 +48,8 @@ interface KaamDostContextType {
     scheduledTime: string;
     baseAmount: number;
     discountAmount: number;
+    distanceKm?: number;
+    etaMinutes?: number;
   }) => Booking;
   updateBookingStatus: (bookingId: string, status: BookingStatus) => void;
   requestExtraWork: (
@@ -74,7 +78,7 @@ interface KaamDostContextType {
     rating: number,
     reviewText: string
   ) => void;
-  simulateIncomingJobForWorker: () => Booking;
+  simulateIncomingJobForWorker: (force100Match?: boolean) => Booking;
   markNotificationsRead: (recipient: 'CUSTOMER' | 'WORKER') => void;
   toasts: ToastItem[];
   showToast: (
@@ -85,6 +89,7 @@ interface KaamDostContextType {
   dismissToast: (id: string) => void;
   uiDemoState: 'normal' | 'skeleton' | 'empty' | 'error';
   setUiDemoState: (state: 'normal' | 'skeleton' | 'empty' | 'error') => void;
+  triggerHaptic: (pattern?: number | readonly number[] | number[]) => boolean;
 }
 
 const KaamDostContext = createContext<KaamDostContextType | undefined>(
@@ -179,6 +184,14 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
                 if (prev.some((b) => b.id === newBooking.id)) return prev;
                 return [newBooking, ...prev];
               });
+
+              // Check if Recommended Jobs algorithm identifies a Top Recommended (100% match) job request
+              if (activeWorker && isTopRecommended100Match(newBooking, activeWorker)) {
+                triggerHaptic(HAPTIC_PATTERNS.TOP_RECOMMENDED_100_MATCH);
+              } else {
+                // Urgent incoming dispatch pulse pattern for standard new job requests
+                triggerHaptic(HAPTIC_PATTERNS.NEW_JOB_REQUEST);
+              }
               break;
             }
 
@@ -195,12 +208,13 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
               setBookings((prev) =>
                 prev.map((b) => {
                   if (b.id !== bookingId) return b;
-                  if (b.extraWorkItems.some((e) => e.id === extraItem.id)) {
+                  const currentExtras = b.extraWorkItems || [];
+                  if (currentExtras.some((e) => e.id === extraItem.id)) {
                     return b;
                   }
                   return {
                     ...b,
-                    extraWorkItems: [...b.extraWorkItems, extraItem],
+                    extraWorkItems: [...currentExtras, extraItem],
                   };
                 })
               );
@@ -212,9 +226,10 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
               setBookings((prev) =>
                 prev.map((b) => {
                   if (b.id !== bookingId) return b;
+                  const currentExtras = b.extraWorkItems || [];
                   return {
                     ...b,
-                    extraWorkItems: b.extraWorkItems.map((e) =>
+                    extraWorkItems: currentExtras.map((e) =>
                       e.id === extraId ? { ...e, status: decision } : e
                     ),
                   };
@@ -359,6 +374,8 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
     scheduledTime: string;
     baseAmount: number;
     discountAmount: number;
+    distanceKm?: number;
+    etaMinutes?: number;
   }): Booking => {
     const bookingId = `KD-${Math.floor(10000 + Math.random() * 89999)}`;
     const otp = `${Math.floor(1000 + Math.random() * 9000)}`;
@@ -397,8 +414,14 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
         },
       ],
       createdAt: 'Just now',
-      distanceKm: params.worker.distanceKm,
-      etaMinutes: params.worker.etaMinutes,
+      distanceKm:
+        typeof params.distanceKm === 'number'
+          ? params.distanceKm
+          : params.worker.distanceKm,
+      etaMinutes:
+        typeof params.etaMinutes === 'number'
+          ? params.etaMinutes
+          : params.worker.etaMinutes,
     };
 
     // Optimistic update + WebSocket emission
@@ -436,6 +459,15 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
       `Booking #${bookingId} synced in real-time between apps`,
       status === 'CANCELLED' ? 'warning' : 'success'
     );
+
+    // Tactile haptic feedback for status updates
+    if (status === 'COMPLETED' || status === 'IN_PROGRESS') {
+      triggerHaptic(HAPTIC_PATTERNS.SUCCESS);
+    } else if (status === 'CANCELLED') {
+      triggerHaptic(HAPTIC_PATTERNS.WARNING);
+    } else {
+      triggerHaptic(HAPTIC_PATTERNS.STATUS_UPDATE);
+    }
   };
 
   const requestExtraWork = (
@@ -455,23 +487,23 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
     };
 
     setBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? {
-              ...b,
-              extraWorkItems: [...b.extraWorkItems, extraItem],
-              messages: [
-                ...b.messages,
-                {
-                  id: `msg-${Date.now()}`,
-                  sender: 'WORKER',
-                  text: `Requested approval for additional work: ${title} (₹${price}).`,
-                  timestamp: 'Just now',
-                },
-              ],
-            }
-          : b
-      )
+      prev.map((b) => {
+        if (b.id !== bookingId) return b;
+        const currentExtras = b.extraWorkItems || [];
+        return {
+          ...b,
+          extraWorkItems: [...currentExtras, extraItem],
+          messages: [
+            ...(b.messages || []),
+            {
+              id: `msg-${Date.now()}`,
+              sender: 'WORKER',
+              text: `Requested approval for additional work: ${title} (₹${price}).`,
+              timestamp: 'Just now',
+            },
+          ],
+        };
+      })
     );
 
     sendWs('extra:request', { bookingId, extraItem });
@@ -491,9 +523,10 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
     setBookings((prev) =>
       prev.map((b) => {
         if (b.id !== bookingId) return b;
+        const currentExtras = b.extraWorkItems || [];
         return {
           ...b,
-          extraWorkItems: b.extraWorkItems.map((e) =>
+          extraWorkItems: currentExtras.map((e) =>
             e.id === extraId ? { ...e, status: decision } : e
           ),
         };
@@ -587,19 +620,72 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
     );
   };
 
-  const simulateIncomingJobForWorker = (): Booking => {
-    return createBooking({
+  const simulateIncomingJobForWorker = (force100Match?: boolean): Booking => {
+    const samples = [
+      {
+        title: 'Emergency Tap Burst & Main Valve Shutoff',
+        desc: 'Main inlet angle cock cracked under pressure, water gushing into kitchen cabinet.',
+        address: 'House #88, 100 Feet Road, 12th Main',
+        area: 'Indiranagar, Bengaluru',
+        distanceKm: 0.7,
+        etaMinutes: 8,
+        amount: 499,
+      },
+      {
+        title: 'Bathroom Wall Mixer Gasket & Diverter Cartridge Replacement',
+        desc: 'Jaguar single-lever diverter cartridge stuck and leaking into false ceiling.',
+        address: 'Flat 202, Wind Tunnel Rd, Domlur Layout',
+        area: 'Domlur, Bengaluru',
+        distanceKm: 1.8,
+        etaMinutes: 16,
+        amount: 649,
+      },
+      {
+        title: 'Balcony Floor Drain Trap Hydro-Jet Cleaning',
+        desc: 'Balcony rain pipe blocked with leaves and silt, water backing up toward living hall.',
+        address: 'Villa 14, 80 Feet Road, 4th Block',
+        area: 'Koramangala, Bengaluru',
+        distanceKm: 3.2,
+        etaMinutes: 25,
+        amount: 799,
+      },
+      {
+        title: 'Rooftop Solar Water Heater Pressure Pipe Fitting',
+        desc: 'Hot water return line joint cracked near solar collector tank on terrace.',
+        address: 'Plot 31, 27th Main, Sector 1',
+        area: 'HSR Layout, Bengaluru',
+        distanceKm: 5.8,
+        etaMinutes: 40,
+        amount: 1100,
+      },
+    ];
+
+    const pick = force100Match
+      ? samples[0]
+      : samples[Math.floor(Math.random() * samples.length)];
+
+    const created = createBooking({
       worker: activeWorker,
-      serviceTitle: 'Emergency Water Leakage & Valve Repair',
-      problemDescription:
-        'Water leaking rapidly from kitchen under-sink inlet line. Need urgent inspection.',
-      address: 'Flat 304, Green Glen Layout, Bellandur',
-      area: 'Bellandur, Bengaluru',
+      serviceTitle: pick.title,
+      problemDescription: pick.desc,
+      address: pick.address,
+      area: pick.area,
       scheduledDate: 'Today (Immediate)',
-      scheduledTime: 'Within 20 mins',
-      baseAmount: activeWorker.rate,
+      scheduledTime: `Within ${pick.etaMinutes} mins`,
+      baseAmount: pick.amount,
       discountAmount: 0,
+      distanceKm: pick.distanceKm,
+      etaMinutes: pick.etaMinutes,
     });
+
+    // Check if Recommended Jobs algorithm identifies a Top Recommended (100% match) job
+    if (activeWorker && isTopRecommended100Match(created, activeWorker)) {
+      triggerHaptic(HAPTIC_PATTERNS.TOP_RECOMMENDED_100_MATCH);
+    } else {
+      triggerHaptic(HAPTIC_PATTERNS.NEW_JOB_REQUEST);
+    }
+
+    return created;
   };
 
   const markNotificationsRead = (recipient: 'CUSTOMER' | 'WORKER') => {
@@ -639,6 +725,7 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
         dismissToast,
         uiDemoState,
         setUiDemoState,
+        triggerHaptic,
       }}
     >
       {children}

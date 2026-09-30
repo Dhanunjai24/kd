@@ -105,7 +105,7 @@ export const CustomerApp: React.FC<{
 
   const pendingExtraApprovalCount = bookings.reduce(
     (acc, b) =>
-      acc + b.extraWorkItems.filter((x) => x.status === 'PENDING').length,
+      acc + (b.extraWorkItems || []).filter((x) => x.status === 'PENDING').length,
     0
   );
 
@@ -769,7 +769,7 @@ export const CustomerApp: React.FC<{
 
         <div className="p-5 space-y-3.5">
           {bookings.map((b) => {
-            const hasPendingExtra = b.extraWorkItems.some(
+            const hasPendingExtra = (b.extraWorkItems || []).some(
               (x) => x.status === 'PENDING'
             );
             return (

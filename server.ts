@@ -159,23 +159,23 @@ wss.on('connection', (ws) => {
 
         case 'extra:request': {
           const { bookingId, extraItem } = payload;
-          bookings = bookings.map((b) =>
-            b.id === bookingId
-              ? {
-                  ...b,
-                  extraWorkItems: [...b.extraWorkItems, extraItem],
-                  messages: [
-                    ...b.messages,
-                    {
-                      id: `msg-${Date.now()}`,
-                      sender: 'WORKER',
-                      text: `Requested approval for additional work: ${extraItem.title} (₹${extraItem.price}).`,
-                      timestamp: 'Just now',
-                    },
-                  ],
-                }
-              : b
-          );
+          bookings = bookings.map((b) => {
+            if (b.id !== bookingId) return b;
+            const currentExtras = b.extraWorkItems || [];
+            return {
+              ...b,
+              extraWorkItems: [...currentExtras, extraItem],
+              messages: [
+                ...(b.messages || []),
+                {
+                  id: `msg-${Date.now()}`,
+                  sender: 'WORKER',
+                  text: `Requested approval for additional work: ${extraItem.title} (₹${extraItem.price}).`,
+                  timestamp: 'Just now',
+                },
+              ],
+            };
+          });
           broadcast('extra:requested', { bookingId, extraItem });
 
           const notif: AppNotification = {
@@ -200,7 +200,8 @@ wss.on('connection', (ws) => {
 
           bookings = bookings.map((b) => {
             if (b.id !== bookingId) return b;
-            const updated = b.extraWorkItems.map((item) => {
+            const currentExtras = b.extraWorkItems || [];
+            const updated = currentExtras.map((item) => {
               if (item.id === extraId) {
                 itemTitle = item.title;
                 itemPrice = item.price;
@@ -212,7 +213,7 @@ wss.on('connection', (ws) => {
               ...b,
               extraWorkItems: updated,
               messages: [
-                ...b.messages,
+                ...(b.messages || []),
                 {
                   id: `msg-${Date.now()}`,
                   sender: 'CUSTOMER',

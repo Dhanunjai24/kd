@@ -52,6 +52,34 @@ export interface WorkerProfile {
   languages: string[];
   completedJobs: number;
   isBookmarked?: boolean;
+  completionSuccessRate?: number; // e.g. 98.6 (98.6%)
+  acceptanceRate?: number; // e.g. 96 (%)
+  onTimeArrivalRate?: number; // e.g. 97.8 (%)
+}
+
+export type RankSortMode =
+  | 'RECOMMENDED'
+  | 'DISTANCE'
+  | 'PAYOUT'
+  | 'URGENCY';
+
+export interface JobRankScore {
+  bookingId: string;
+  totalScore: number; // 0 - 100
+  matchPercentage: number; // 0 - 100
+  tier: 'TOP_RECOMMENDED' | 'HIGH_MATCH' | 'GOOD_MATCH' | 'STANDARD';
+  tierLabel: string;
+  tierBadgeClass: string;
+  distanceScore: number; // 0 - 100
+  ratingScore: number; // 0 - 100
+  completionScore: number; // 0 - 100
+  distanceKm: number;
+  weights: {
+    distance: number; // e.g. 0.40
+    tradeRating: number; // e.g. 0.35
+    completionRate: number; // e.g. 0.25
+  };
+  insights: string[];
 }
 
 export interface ServiceCategoryInfo {

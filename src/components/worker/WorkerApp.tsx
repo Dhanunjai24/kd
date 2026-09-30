@@ -1,6 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useKaamDost } from '../../context/KaamDostContext';
-import { TradeCategory } from '../../types/kaamdost';
+import { TradeCategory, RankSortMode } from '../../types/kaamdost';
+import { rankAndSortJobs, ALGORITHM_WEIGHTS } from '../../utils/jobRanking';
+import {
+  triggerHaptic,
+  HAPTIC_PATTERNS,
+  isHapticsSupported,
+} from '../../utils/haptics';
 import {
   SmartImage,
   StatefulButton,
@@ -9,6 +15,7 @@ import {
   ErrorState,
 } from '../ui/StateSystem';
 import { ChatScreen } from '../customer/CustomerTrackingAndModals';
+import { WorkerEarningsChart } from './WorkerEarningsChart';
 import {
   Power,
   Navigation,
@@ -29,6 +36,20 @@ import {
   Clock,
   Sparkles,
   LogIn,
+  ChevronDown,
+  ChevronUp,
+  Compass,
+  TrendingUp,
+  SlidersHorizontal,
+  Award,
+  Info,
+  X,
+  Target,
+  Mic,
+  Smartphone,
+  Zap,
+  Send,
+  ChevronRight,
 } from 'lucide-react';
 
 export type WorkerTab =
@@ -61,6 +82,7 @@ export const WorkerApp: React.FC<{
     showToast,
     uiDemoState,
     setUiDemoState,
+    sendChatMessage,
   } = useKaamDost();
 
   const [tab, setTab] = useState<WorkerTab>('DASHBOARD');
@@ -75,15 +97,48 @@ export const WorkerApp: React.FC<{
   const [showAddExtraForm, setShowAddExtraForm] = useState<boolean>(false);
   const [editRate, setEditRate] = useState<string>(String(activeWorker.rate));
   const [editTrade, setEditTrade] = useState<TradeCategory>(activeWorker.trade);
+  const [rankSortMode, setRankSortMode] = useState<RankSortMode>('RECOMMENDED');
+  const [expandedJobBreakdownId, setExpandedJobBreakdownId] = useState<string | null>(null);
+  const [showAlgorithmInfoModal, setShowAlgorithmInfoModal] = useState<boolean>(false);
 
   const workerBookings = bookings;
   const currentJob =
     workerBookings.find((b) => b.id === selectedJobId) || workerBookings[0];
 
   const requestedJobs = workerBookings.filter((b) => b.status === 'REQUESTED');
+  const rankedRequestedJobs = rankAndSortJobs(
+    requestedJobs,
+    activeWorker,
+    rankSortMode
+  );
   const ongoingJobs = workerBookings.filter((b) =>
     ['ACCEPTED', 'EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(b.status)
   );
+
+  // Monitor incoming job requests and trigger distinct haptic vibration feedback
+  const prevRequestedJobsCountRef = useRef(requestedJobs.length);
+  useEffect(() => {
+    if (requestedJobs.length > prevRequestedJobsCountRef.current) {
+      // Check if Recommended Jobs algorithm identified a 'Top Recommended' (100% match) job request
+      const top100Job = rankedRequestedJobs.find(
+        (r) => r.rank.tier === 'TOP_RECOMMENDED' && r.rank.matchPercentage === 100
+      );
+
+      if (top100Job) {
+        // Unique, distinct long-pulse haptic pattern specifically for 100% Top Recommended match!
+        triggerHaptic(HAPTIC_PATTERNS.TOP_RECOMMENDED_100_MATCH);
+        showToast(
+          '🔥 Top Recommended (100% Match) Job Detected!',
+          `${top100Job.job.serviceTitle} — Triggered distinct long-pulse tactile vibration [400ms, 100ms, 400ms, 100ms, 600ms]`,
+          'success'
+        );
+      } else {
+        // Urgent incoming dispatch pulse pattern for standard new job requests
+        triggerHaptic(HAPTIC_PATTERNS.NEW_JOB_REQUEST);
+      }
+    }
+    prevRequestedJobsCountRef.current = requestedJobs.length;
+  }, [requestedJobs.length, rankedRequestedJobs, showToast]);
 
   const completedOrPaidJobs = workerBookings.filter(
     (b) =>
@@ -92,7 +147,7 @@ export const WorkerApp: React.FC<{
       b.status === 'IN_PROGRESS'
   );
   const grossEarnings = completedOrPaidJobs.reduce((sum, b) => {
-    const extras = b.extraWorkItems
+    const extras = (b.extraWorkItems || [])
       .filter((x) => x.status === 'APPROVED')
       .reduce((s, x) => s + x.price, 0);
     return sum + b.baseAmount + extras + (b.tipAmount || 0);
@@ -287,6 +342,7 @@ export const WorkerApp: React.FC<{
               successText={workerOnline ? 'Offline' : 'Online!'}
               className="px-3 py-2 rounded-full text-xs font-bold"
               onClick={() => {
+                triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
                 const next = !workerOnline;
                 setWorkerOnline(next);
                 showToast(
@@ -371,104 +427,406 @@ export const WorkerApp: React.FC<{
                       : 'Go Online to receive new job requests'}
                   </h2>
                 </div>
-                <StatefulButton
-                  variant="orange"
-                  loadingText="Dispatching..."
-                  successText="New Job!"
-                  className="px-3.5 py-2.5 rounded-xl text-xs font-bold shrink-0"
-                  onClick={() => {
-                    const created = simulateIncomingJobForWorker();
-                    setSelectedJobId(created.id);
-                  }}
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>+ Test Job</span>
-                </StatefulButton>
+                <div className="flex items-center gap-2 shrink-0">
+                  <StatefulButton
+                    variant="orange"
+                    loadingText="Dispatching..."
+                    successText="100% Match!"
+                    className="px-3 py-2 rounded-xl text-xs font-bold shrink-0 bg-amber-500 hover:bg-amber-600 text-white"
+                    onClick={() => {
+                      const created = simulateIncomingJobForWorker(true);
+                      setSelectedJobId(created.id);
+                    }}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+                    <span>⭐ 100% Match</span>
+                  </StatefulButton>
+                  <StatefulButton
+                    variant="blue"
+                    loadingText="Dispatching..."
+                    successText="Dispatched!"
+                    className="px-3 py-2 rounded-xl text-xs font-bold shrink-0 bg-blue-700 hover:bg-blue-800 text-white"
+                    onClick={() => {
+                      const created = simulateIncomingJobForWorker(false);
+                      setSelectedJobId(created.id);
+                    }}
+                  >
+                    <span>+ Test Job</span>
+                  </StatefulButton>
+                </div>
               </div>
 
-              {/* REAL-TIME JOB REQUESTS (ACCEPT / DECLINE) */}
+              {/* RECOMMENDED JOBS ALGORITHM & DISPATCH ENGINE */}
               <div>
+                <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-xs mb-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                        <Award className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-extrabold text-blue-600 uppercase tracking-wider block">
+                          KaamDost Smart Match Engine
+                        </span>
+                        <h3 className="text-xs font-bold text-slate-900">
+                          Recommended Jobs Algorithm
+                        </h3>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAlgorithmInfoModal(true)}
+                      className="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Info className="w-3 h-3 text-slate-500" />
+                      <span>How it Ranks</span>
+                    </button>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 leading-relaxed font-body">
+                    Job requests are mathematically ranked using your{' '}
+                    <span className="font-semibold text-slate-700">Distance</span> (40%),{' '}
+                    <span className="font-semibold text-slate-700">Trade Rating</span> (35%), and{' '}
+                    <span className="font-semibold text-slate-700">Completion Success</span> (25%).
+                  </p>
+
+                  {/* Worker Live Score Factor Metrics */}
+                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-50">
+                    <div className="bg-slate-50 rounded-2xl p-2.5 text-center">
+                      <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-500">
+                        <MapPin className="w-3 h-3 text-blue-500" />
+                        <span>Distance</span>
+                      </div>
+                      <span className="text-xs font-extrabold text-slate-900 mt-0.5 block tabular-nums">
+                        &lt; 6.0 km
+                      </span>
+                      <span className="text-[9px] text-slate-400">40% weight</span>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-2xl p-2.5 text-center">
+                      <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-500">
+                        <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                        <span>Rating</span>
+                      </div>
+                      <span className="text-xs font-extrabold text-slate-900 mt-0.5 block tabular-nums">
+                        {activeWorker.rating} ★
+                      </span>
+                      <span className="text-[9px] text-slate-400">35% weight</span>
+                    </div>
+
+                    <div className="bg-slate-50 rounded-2xl p-2.5 text-center">
+                      <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-500">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        <span>Success</span>
+                      </div>
+                      <span className="text-xs font-extrabold text-slate-900 mt-0.5 block tabular-nums">
+                        {activeWorker.completionSuccessRate ?? 98.6}%
+                      </span>
+                      <span className="text-[9px] text-slate-400">25% weight</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter & Sorting Mode Pills */}
                 <div className="flex items-center justify-between mb-2.5">
-                  <h3 className="text-sm font-bold text-slate-900">
-                    New Job Requests ({requestedJobs.length})
-                  </h3>
+                  <div className="flex items-center gap-1.5">
+                    <SlidersHorizontal className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-800">
+                      Ranked Job Requests ({rankedRequestedJobs.length})
+                    </span>
+                  </div>
                   <span className="text-[11px] font-semibold text-emerald-600">
                     Upfront ₹ Payout
                   </span>
                 </div>
 
-                {requestedJobs.length === 0 ? (
-                  <div className="bg-white rounded-3xl p-4 border border-slate-100 text-center space-y-2">
-                    <p className="text-xs font-semibold text-slate-600">
-                      No pending requests right now.
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setRankSortMode('RECOMMENDED')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                      rankSortMode === 'RECOMMENDED'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Recommended (AI Rank)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRankSortMode('DISTANCE')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                      rankSortMode === 'DISTANCE'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <MapPin className="w-3 h-3" />
+                    <span>Nearest First</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRankSortMode('PAYOUT')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                      rankSortMode === 'PAYOUT'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <IndianRupee className="w-3 h-3" />
+                    <span>Highest Payout</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRankSortMode('URGENCY')}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition cursor-pointer flex items-center gap-1 ${
+                      rankSortMode === 'URGENCY'
+                        ? 'bg-blue-600 text-white shadow-xs'
+                        : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Clock className="w-3 h-3" />
+                    <span>Newest First</span>
+                  </button>
+                </div>
+
+                {rankedRequestedJobs.length === 0 ? (
+                  <div className="bg-white rounded-3xl p-5 border border-slate-100 text-center space-y-2">
+                    <p className="text-xs font-bold text-slate-700">
+                      No pending requests in your area right now.
                     </p>
                     <p className="text-[11px] text-slate-400">
-                      Book any service in Customer App — it will appear here in
-                      real time via WebSocket!
+                      Tap &ldquo;+ Test Job&rdquo; above or book in Customer App to see the algorithm rank incoming jobs!
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {requestedJobs.map((job) => (
-                      <div
-                        key={job.id}
-                        className="bg-white rounded-3xl p-4 border-2 border-amber-400 shadow-sm space-y-3"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase">
-                              <Clock className="w-3 h-3" /> New Request •{' '}
-                              {job.distanceKm} km away
+                  <div className="space-y-3.5">
+                    {rankedRequestedJobs.map(({ job, rank }) => {
+                      const isExpanded = expandedJobBreakdownId === job.id;
+                      return (
+                        <div
+                          key={job.id}
+                          className="bg-white rounded-3xl p-4 border-2 border-slate-100 hover:border-blue-200 shadow-xs space-y-3 transition"
+                        >
+                          {/* Top Badges: Algorithm Match Badge & Distance Pill */}
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-wide uppercase ${rank.tierBadgeClass}`}
+                            >
+                              {rank.tier === 'TOP_RECOMMENDED' && '⭐'}
+                              {rank.tier === 'HIGH_MATCH' && '⚡'}
+                              {rank.tier === 'GOOD_MATCH' && '📍'}
+                              <span>
+                                {rank.matchPercentage}% {rank.tierLabel}
+                              </span>
                             </span>
-                            <h4 className="text-sm font-bold text-slate-900 mt-1.5">
-                              {job.serviceTitle}
-                            </h4>
-                            <p className="text-xs text-slate-500 mt-0.5">
-                              {job.customerName} • {job.area}
-                            </p>
+
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-semibold">
+                              <MapPin className="w-3 h-3 text-blue-500" />
+                              <span className="tabular-nums">{job.distanceKm} km away</span>
+                              <span>• ~{job.etaMinutes || Math.round(job.distanceKm * 7)}m</span>
+                            </span>
                           </div>
-                          <div className="text-right">
-                            <span className="text-base font-extrabold text-emerald-600 tabular-nums">
-                              ₹{job.baseAmount}
-                            </span>
-                            <span className="block text-[10px] text-slate-400">
-                              Est. Payout
-                            </span>
+
+                          {/* 100% Top Recommended Match Tactile Indicator */}
+                          {rank.matchPercentage === 100 && (
+                            <div className="bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/10 border border-emerald-300 rounded-2xl px-3 py-1.5 flex items-center justify-between text-xs">
+                              <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-[11px]">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                                <span>100% Match • Distinct Long-Pulse Haptic Triggered</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  triggerHaptic(HAPTIC_PATTERNS.TOP_RECOMMENDED_100_MATCH);
+                                  showToast(
+                                    '🔥 Vibrated: 100% Match Long-Pulse Pattern',
+                                    'Pattern: [400ms, 100ms, 400ms, 100ms, 600ms]',
+                                    'success'
+                                  );
+                                }}
+                                className="px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                                title="Feel the unique distinct long-pulse tactile vibration"
+                              >
+                                <Smartphone className="w-3 h-3" />
+                                <span>Feel Haptic 📳</span>
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Job Title & Payout */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="text-sm font-bold text-slate-900 leading-snug">
+                                {job.serviceTitle}
+                              </h4>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                {job.customerName} • {job.area}
+                              </p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-base font-extrabold text-emerald-600 tabular-nums">
+                                ₹{job.baseAmount}
+                              </span>
+                              <span className="block text-[10px] text-slate-400">
+                                Direct Take-Home
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Customer Problem Note */}
+                          <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-body">
+                            &ldquo;{job.problemDescription}&rdquo;
+                          </p>
+
+                          {/* Interactive Score Breakdown Toggle */}
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedJobBreakdownId(
+                                  isExpanded ? null : job.id
+                                )
+                              }
+                              className="w-full py-1.5 px-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-[11px] font-bold flex items-center justify-between transition cursor-pointer"
+                            >
+                              <div className="flex items-center gap-1.5">
+                                <Target className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Why this job is recommended ({rank.matchPercentage}% match)</span>
+                              </div>
+                              {isExpanded ? (
+                                <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                              )}
+                            </button>
+
+                            {/* Expanded Breakdown Cards */}
+                            {isExpanded && (
+                              <div className="mt-2.5 p-3 rounded-2xl bg-gradient-to-b from-blue-50/50 to-slate-50 border border-blue-100 space-y-2.5 text-xs">
+                                <div className="space-y-2">
+                                  {/* Metric 1: Distance */}
+                                  <div>
+                                    <div className="flex justify-between text-[11px] font-semibold text-slate-700 mb-1">
+                                      <span className="flex items-center gap-1">
+                                        <MapPin className="w-3 h-3 text-blue-500" />
+                                        Distance Factor (40% Weight):
+                                      </span>
+                                      <span className="font-bold text-slate-900 tabular-nums">
+                                        {rank.distanceScore}/100 ({job.distanceKm} km)
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                      <div
+                                        className="bg-blue-500 h-full rounded-full"
+                                        style={{ width: `${rank.distanceScore}%` }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Metric 2: Trade Rating */}
+                                  <div>
+                                    <div className="flex justify-between text-[11px] font-semibold text-slate-700 mb-1">
+                                      <span className="flex items-center gap-1">
+                                        <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                        Trade Rating Factor (35% Weight):
+                                      </span>
+                                      <span className="font-bold text-slate-900 tabular-nums">
+                                        {rank.ratingScore}/100 ({activeWorker.rating}★ {activeWorker.trade})
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                      <div
+                                        className="bg-amber-500 h-full rounded-full"
+                                        style={{ width: `${rank.ratingScore}%` }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Metric 3: Completion Success Rate */}
+                                  <div>
+                                    <div className="flex justify-between text-[11px] font-semibold text-slate-700 mb-1">
+                                      <span className="flex items-center gap-1">
+                                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                                        Success Rate Factor (25% Weight):
+                                      </span>
+                                      <span className="font-bold text-slate-900 tabular-nums">
+                                        {rank.completionScore}/100 ({activeWorker.completionSuccessRate ?? 98.6}%)
+                                      </span>
+                                    </div>
+                                    <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                      <div
+                                        className="bg-emerald-500 h-full rounded-full"
+                                        style={{ width: `${rank.completionScore}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Composite Formula Explanation */}
+                                <div className="p-2 rounded-xl bg-white border border-blue-100 text-[10px] text-slate-600 font-mono">
+                                  <span>Formula: </span>
+                                  <span className="text-blue-700 font-bold">(0.40 × {rank.distanceScore})</span>
+                                  <span> + </span>
+                                  <span className="text-amber-700 font-bold">(0.35 × {rank.ratingScore})</span>
+                                  <span> + </span>
+                                  <span className="text-emerald-700 font-bold">(0.25 × {rank.completionScore})</span>
+                                  <span> = </span>
+                                  <span className="font-bold text-slate-900">{rank.matchPercentage}% Total Fit</span>
+                                </div>
+
+                                {/* Insights Bullet Points */}
+                                <div className="space-y-1 pt-1">
+                                  {rank.insights.map((insight, idx) => (
+                                    <p
+                                      key={idx}
+                                      className="text-[11px] text-slate-600 flex items-start gap-1.5 leading-tight"
+                                    >
+                                      <span className="text-blue-500 font-bold">•</span>
+                                      <span>{insight}</span>
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Accept / Decline Action Buttons */}
+                          <div className="grid grid-cols-2 gap-2.5 pt-1">
+                            <StatefulButton
+                              variant="danger"
+                              loadingText="Declining..."
+                              successText="Declined"
+                              className="py-2.5 rounded-xl text-xs font-bold"
+                              onClick={() => {
+                                triggerHaptic(HAPTIC_PATTERNS.WARNING);
+                                updateBookingStatus(job.id, 'CANCELLED');
+                              }}
+                            >
+                              <span>Decline</span>
+                            </StatefulButton>
+                            <StatefulButton
+                              variant="emerald"
+                              loadingText="Accepting..."
+                              successText="Accepted!"
+                              className="py-2.5 rounded-xl text-xs font-bold"
+                              onClick={() => {
+                                triggerHaptic(HAPTIC_PATTERNS.STATUS_UPDATE);
+                                updateBookingStatus(job.id, 'ACCEPTED');
+                                setSelectedJobId(job.id);
+                                setTab('ACTIVE_JOB');
+                              }}
+                            >
+                              <span>Accept Job →</span>
+                            </StatefulButton>
                           </div>
                         </div>
-
-                        <p className="text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100 font-body">
-                          &ldquo;{job.problemDescription}&rdquo;
-                        </p>
-
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <StatefulButton
-                            variant="danger"
-                            loadingText="Declining..."
-                            successText="Declined"
-                            className="py-2.5 rounded-xl text-xs font-bold"
-                            onClick={() =>
-                              updateBookingStatus(job.id, 'CANCELLED')
-                            }
-                          >
-                            <span>Decline</span>
-                          </StatefulButton>
-                          <StatefulButton
-                            variant="emerald"
-                            loadingText="Accepting..."
-                            successText="Accepted!"
-                            className="py-2.5 rounded-xl text-xs font-bold"
-                            onClick={() => {
-                              updateBookingStatus(job.id, 'ACCEPTED');
-                              setSelectedJobId(job.id);
-                              setTab('ACTIVE_JOB');
-                            }}
-                          >
-                            <span>Accept Job →</span>
-                          </StatefulButton>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -553,12 +911,16 @@ export const WorkerApp: React.FC<{
               <div className="flex gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
+                    triggerHaptic(HAPTIC_PATTERNS.STATUS_UPDATE);
+                    if (currentJob.status === 'ACCEPTED') {
+                      updateBookingStatus(currentJob.id, 'EN_ROUTE');
+                    }
                     showToast(
                       'Turn-by-Turn GPS Navigation Started',
-                      `Routing to ${currentJob.address}`
-                    )
-                  }
+                      `Routing to ${currentJob.address} (Status: En Route)`
+                    );
+                  }}
                   className="flex-1 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <Navigation className="w-3.5 h-3.5" />
@@ -566,11 +928,16 @@ export const WorkerApp: React.FC<{
                 </button>
                 <button
                   type="button"
-                  onClick={() => setTab('CHAT')}
+                  onClick={() => {
+                    triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
+                    setTab('CHAT');
+                  }}
                   className="px-3.5 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  title="Open Chat with Hands-Free Voice Dictation"
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Chat</span>
+                  <Mic className="w-3 h-3 text-amber-400" />
+                  <span>Chat & Mic</span>
                 </button>
                 <button
                   type="button"
@@ -585,6 +952,57 @@ export const WorkerApp: React.FC<{
                 >
                   <Phone className="w-3.5 h-3.5" />
                 </button>
+              </div>
+
+              {/* Instant 1-Tap Quick Replies for Hands-Free Communication */}
+              <div className="pt-2 border-t border-slate-700/60 space-y-1.5">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-amber-300 flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-amber-400 fill-amber-400" />
+                    <span>Quick Reply to Customer (1-Tap):</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
+                      setTab('CHAT');
+                    }}
+                    className="text-blue-300 hover:text-white flex items-center gap-0.5 font-semibold text-[10px] cursor-pointer"
+                  >
+                    <span>Full Chat</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+                  {[
+                    { text: 'On my way', icon: '🚗' },
+                    { text: 'Running 5 mins late', icon: '⏱️' },
+                    { text: 'Stuck in traffic, reaching soon', icon: '🚦' },
+                    { text: 'Reached your building gate', icon: '📍' },
+                    { text: 'At doorstep, please open', icon: '🚪' },
+                    { text: 'Starting diagnostic inspection', icon: '🔧' },
+                  ].map((qr, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic(HAPTIC_PATTERNS.STATUS_UPDATE);
+                        sendChatMessage(currentJob.id, 'WORKER', qr.text);
+                        showToast(
+                          `Quick Reply Sent to ${currentJob.customerName}`,
+                          `"${qr.text}" dispatched via real-time channel`,
+                          'info'
+                        );
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-blue-600 border border-slate-700 hover:border-blue-400 text-white text-[11px] font-semibold flex items-center gap-1.5 whitespace-nowrap transition cursor-pointer shrink-0 shadow-2xs"
+                      title={`Send "${qr.text}" instantly to ${currentJob.customerName}`}
+                    >
+                      <span>{qr.icon}</span>
+                      <span>{qr.text}</span>
+                      <Send className="w-2.5 h-2.5 text-blue-300 ml-0.5" />
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -616,7 +1034,10 @@ export const WorkerApp: React.FC<{
                 loadingText="Updating..."
                 successText="Arrived!"
                 className="px-3.5 py-2 rounded-xl text-xs"
-                onClick={() => updateBookingStatus(currentJob.id, 'ARRIVED')}
+                onClick={() => {
+                  triggerHaptic(HAPTIC_PATTERNS.STATUS_UPDATE);
+                  updateBookingStatus(currentJob.id, 'ARRIVED');
+                }}
               >
                 <span>
                   {['ARRIVED', 'IN_PROGRESS', 'COMPLETED', 'PAID'].includes(
@@ -655,9 +1076,10 @@ export const WorkerApp: React.FC<{
                 loadingText="Verifying OTP..."
                 successText="Service Started!"
                 className="w-full py-2.5 rounded-xl text-xs font-bold"
-                onClick={() =>
-                  updateBookingStatus(currentJob.id, 'IN_PROGRESS')
-                }
+                onClick={() => {
+                  triggerHaptic(HAPTIC_PATTERNS.SUCCESS);
+                  updateBookingStatus(currentJob.id, 'IN_PROGRESS');
+                }}
               >
                 <span>Verify OTP & Start Work</span>
               </StatefulButton>
@@ -707,6 +1129,7 @@ export const WorkerApp: React.FC<{
                       successText="Sent to Customer!"
                       className="flex-1 py-2 rounded-xl text-xs font-bold"
                       onClick={() => {
+                        triggerHaptic(HAPTIC_PATTERNS.STATUS_UPDATE);
                         requestExtraWork(
                           currentJob.id,
                           extraTitle || 'Additional Spare Part',
@@ -722,9 +1145,9 @@ export const WorkerApp: React.FC<{
               )}
 
               {/* Status of Extra Work Items */}
-              {currentJob.extraWorkItems.length > 0 && (
+              {(currentJob.extraWorkItems || []).length > 0 && (
                 <div className="space-y-1.5">
-                  {currentJob.extraWorkItems.map((item) => (
+                  {(currentJob.extraWorkItems || []).map((item) => (
                     <div
                       key={item.id}
                       className="bg-white px-3 py-2 rounded-xl border border-amber-100 flex items-center justify-between text-xs"
@@ -755,7 +1178,10 @@ export const WorkerApp: React.FC<{
               loadingText="Completing Service..."
               successText="Service Completed!"
               className="w-full py-3.5 rounded-2xl text-xs font-bold"
-              onClick={() => updateBookingStatus(currentJob.id, 'COMPLETED')}
+              onClick={() => {
+                triggerHaptic(HAPTIC_PATTERNS.SUCCESS);
+                updateBookingStatus(currentJob.id, 'COMPLETED');
+              }}
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>Mark Service Completed & Send Final Bill</span>
@@ -814,17 +1240,26 @@ export const WorkerApp: React.FC<{
               loadingText="Transferring via IMPS/UPI..."
               successText="Credited to Bank!"
               className="w-full py-3.5 rounded-2xl text-xs font-bold"
-              onClick={() =>
+              onClick={() => {
+                triggerHaptic(HAPTIC_PATTERNS.SUCCESS);
                 showToast(
                   `₹${netTakeHome} Transferred Instantly`,
                   `${activeWorker.name} • HDFC Bank ****4821 (UPI)`
-                )
-              }
+                );
+              }}
             >
               <IndianRupee className="w-4 h-4" />
               <span>Instant Withdraw ₹{netTakeHome} to Bank / UPI</span>
             </StatefulButton>
           </div>
+
+          {/* Daily Earnings Trend Progression Chart (Recharts) */}
+          <WorkerEarningsChart
+            completedOrPaidJobs={completedOrPaidJobs}
+            activeWorker={activeWorker}
+            grossEarnings={grossEarnings}
+            netTakeHome={netTakeHome}
+          />
         </div>
       )}
 
@@ -934,6 +1369,105 @@ export const WorkerApp: React.FC<{
             </div>
           </div>
 
+          {/* Haptic Vibration Feedback Controller & Tester */}
+          <div className="bg-white rounded-3xl p-4 border border-slate-100 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Smartphone className="w-4 h-4 animate-pulse" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Haptic Vibration Feedback
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Tactile alerts via navigator.vibrate()
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                  isHapticsSupported()
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-blue-50 text-blue-700 border border-blue-200'
+                }`}
+              >
+                {isHapticsSupported() ? 'Hardware Active' : 'Ready'}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-500 font-body leading-relaxed">
+              Provides distinct physical vibration pulses on your device when new job requests arrive, when accepting jobs, and when status updates are tapped.
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(HAPTIC_PATTERNS.TOP_RECOMMENDED_100_MATCH);
+                  showToast(
+                    '🔥 Vibrated: 100% Match Long-Pulse Alert',
+                    'Pattern: [400ms, 100ms, 400ms, 100ms, 600ms]',
+                    'success'
+                  );
+                }}
+                className="p-2.5 rounded-2xl bg-amber-50/70 hover:bg-amber-100/90 border-2 border-amber-300 text-center transition cursor-pointer shadow-xs ring-2 ring-amber-200/50"
+              >
+                <span className="block text-[10px] font-extrabold text-amber-800 uppercase tracking-tight">
+                  ⭐ Top Match (100%)
+                </span>
+                <span className="text-[11px] font-extrabold text-amber-900">
+                  Long-Pulse 📳
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(HAPTIC_PATTERNS.NEW_JOB_REQUEST);
+                  showToast(
+                    '📳 Vibrated: Standard New Job Alert',
+                    'Pattern: [150ms, 70ms, 200ms, 70ms, 300ms]'
+                  );
+                }}
+                className="p-2.5 rounded-2xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 text-center transition cursor-pointer"
+              >
+                <span className="block text-[10px] font-bold text-indigo-700">Dispatch Alert</span>
+                <span className="text-[11px] font-bold text-slate-800">Standard Job</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(HAPTIC_PATTERNS.STATUS_UPDATE);
+                  showToast(
+                    '📳 Vibrated: Status Update Tap',
+                    'Pattern: [50ms, 60ms, 60ms]'
+                  );
+                }}
+                className="p-2.5 rounded-2xl bg-slate-50 hover:bg-blue-50 border border-slate-200 text-center transition cursor-pointer"
+              >
+                <span className="block text-[10px] font-bold text-blue-700">Status Tap</span>
+                <span className="text-[11px] font-bold text-slate-800">Double Pulse</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  triggerHaptic(HAPTIC_PATTERNS.SUCCESS);
+                  showToast(
+                    '🎉 Vibrated: Service Success',
+                    'Pattern: [60ms, 50ms, 100ms, 50ms, 150ms]'
+                  );
+                }}
+                className="p-2.5 rounded-2xl bg-slate-50 hover:bg-emerald-50 border border-slate-200 text-center transition cursor-pointer"
+              >
+                <span className="block text-[10px] font-bold text-emerald-700">Success</span>
+                <span className="text-[11px] font-bold text-slate-800">Completed 🎉</span>
+              </button>
+            </div>
+          </div>
+
           <div className="bg-white rounded-3xl p-4 border border-slate-100 space-y-3">
             <div className="flex items-center gap-2">
               <HelpCircle className="w-4 h-4 text-amber-500" />
@@ -975,6 +1509,107 @@ export const WorkerApp: React.FC<{
               <ArrowUpRight className="w-5 h-5" />
             </button>
           )}
+        </div>
+      )}
+
+      {/* ALGORITHM EXPLAINER MODAL */}
+      {showAlgorithmInfoModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Recommended Jobs Algorithm
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-semibold">
+                    Fair, transparent dispatch mathematics
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAlgorithmInfoModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 font-body leading-relaxed">
+              KaamDost connects technicians with incoming customers using a transparent, multi-factor weighting algorithm designed to maximize earnings while cutting unpaid commute times.
+            </p>
+
+            <div className="space-y-3">
+              {/* Factor 1 */}
+              <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-blue-900 text-xs">
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                    <span>1. Live Distance Proximity (40% Weight)</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-600 text-white font-extrabold">
+                    Primary
+                  </span>
+                </div>
+                <p className="text-[11px] text-blue-950 font-body leading-relaxed">
+                  Jobs within &lt; 1.5 km receive maximum scores (100 pts). Minimizes your fuel spend and ensures customers receive emergency arrival within 15–20 minutes.
+                </p>
+              </div>
+
+              {/* Factor 2 */}
+              <div className="p-3 rounded-2xl bg-amber-50/70 border border-amber-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-900 text-xs">
+                    <Star className="w-3.5 h-3.5 text-amber-600 fill-amber-600" />
+                    <span>2. Trade Rating & Specialty (35% Weight)</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-600 text-white font-extrabold">
+                    Reputation
+                  </span>
+                </div>
+                <p className="text-[11px] text-amber-950 font-body leading-relaxed">
+                  Rewards your verified craftsmanship score ({activeWorker.rating}★). Exact trade specialty matches receive a 1.0 multiplier for top customer confidence.
+                </p>
+              </div>
+
+              {/* Factor 3 */}
+              <div className="p-3 rounded-2xl bg-emerald-50/70 border border-emerald-100 space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-900 text-xs">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>3. Completion Success Rate (25% Weight)</span>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-600 text-white font-extrabold">
+                    Reliability
+                  </span>
+                </div>
+                <p className="text-[11px] text-emerald-950 font-body leading-relaxed">
+                  Calculated from your historical dispute-free, on-time completions ({activeWorker.completionSuccessRate ?? 98.6}%). Reliable technicians are consistently prioritized on lucrative high-value jobs.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-slate-900 text-white text-[11px] space-y-1">
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
+                Partner Tip to Rank Higher
+              </span>
+              <p className="text-slate-300 font-body leading-relaxed">
+                Stay online in high-density corridors like Indiranagar and Koramangala. Maintaining a 98%+ completion rate grants you instant priority dispatch.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAlgorithmInfoModal(false)}
+              className="w-full py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition cursor-pointer"
+            >
+              Got it, Close
+            </button>
+          </div>
         </div>
       )}
 
@@ -1026,7 +1661,10 @@ const WorkerBottomNav: React.FC<{
           <button
             key={item.id}
             type="button"
-            onClick={() => onSelect(item.id)}
+            onClick={() => {
+              triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
+              onSelect(item.id);
+            }}
             className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-full transition cursor-pointer ${
               active
                 ? 'bg-amber-500 text-slate-950 font-bold'
