@@ -20,6 +20,11 @@ if (!isTsxRunning) {
     }
   );
 
+  child.on('error', (err) => {
+    console.error('Child spawn error:', err);
+    process.exit(1);
+  });
+
   child.on('exit', (code) => {
     process.exit(code ?? 0);
   });

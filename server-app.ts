@@ -18,9 +18,36 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+process.on('uncaughtException', (err) => {
+  console.error('[Process] Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Process] Unhandled rejection:', reason);
+});
+
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on('error', (err) => {
+  console.error('[WSS] Server error:', err);
+});
+
+// Explicitly handle HTTP upgrade requests to prevent collisions with Vite or internal proxies
+server.on('upgrade', (request, socket, head) => {
+  const url = request.url || '';
+  const pathname = url.split('?')[0];
+
+  // Route KaamDost real-time bus connections
+  if (pathname === '/ws' || pathname === '/api/ws' || pathname === '/') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+  }
+});
 
 app.use(express.json());
 
@@ -353,9 +380,29 @@ wss.on('connection', (ws) => {
     }
   });
 
+  (ws as any).isAlive = true;
+  ws.on('pong', () => {
+    (ws as any).isAlive = true;
+  });
+
   ws.on('close', () => {
     console.log('[WS] Client disconnected');
   });
+});
+
+// Periodic heartbeat to prevent proxy timeouts (Cloud Run / load balancers)
+const heartbeatInterval = setInterval(() => {
+  wss.clients.forEach((client: any) => {
+    if (client.isAlive === false) {
+      return client.terminate();
+    }
+    client.isAlive = false;
+    client.ping();
+  });
+}, 25000);
+
+wss.on('close', () => {
+  clearInterval(heartbeatInterval);
 });
 
 // Vite Middleware integration for dev mode or static files for production
@@ -365,7 +412,10 @@ async function startServer() {
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -376,9 +426,18 @@ async function startServer() {
     });
   }
 
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`KaamDost full-stack server running with WebSocket on port ${PORT}`);
+  // Dev server must run on port 3000 in AI Studio environment
+  // Nginx reverse proxy listens on 8080 and forwards to localhost:3000
+  const args = process.argv.slice(2);
+  const portIdx = args.indexOf('--port');
+  const cliPort = portIdx !== -1 && args[portIdx + 1] ? parseInt(args[portIdx + 1], 10) : NaN;
+  const PORT = !isNaN(cliPort) && cliPort !== 8080 ? cliPort : 3000;
+
+  const hostIdx = args.indexOf('--host');
+  const HOST = hostIdx !== -1 && args[hostIdx + 1] ? args[hostIdx + 1] : '0.0.0.0';
+
+  server.listen(PORT, HOST, () => {
+    console.log(`KaamDost full-stack server running with WebSocket on ${HOST}:${PORT}`);
   });
 }
 

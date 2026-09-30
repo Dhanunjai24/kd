@@ -175,20 +175,54 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   };
 
-  // Connect to authoritative WebSocket Server
+  // Connect to authoritative WebSocket Server with HTTP REST fallback
   useEffect(() => {
     let reconnectTimeout: any;
+    let pollingInterval: any;
+    let isMounted = true;
+    let reconnectAttempts = 0;
+
+    // Initial state hydration via REST API for immediate, instant load
+    const hydrateFromRest = async () => {
+      try {
+        const res = await fetch('/api/state');
+        if (res.ok && isMounted) {
+          const state: ServerSyncState = await res.json();
+          if (state.workers) setWorkers(state.workers);
+          if (state.bookings) setBookings(state.bookings);
+          if (state.notifications) setNotifications(state.notifications);
+          if (typeof state.workerOnline === 'boolean') {
+            setWorkerOnlineState(state.workerOnline);
+          }
+        }
+      } catch {
+        // Uses local/offline cache if network unavailable
+      }
+    };
+
+    hydrateFromRest();
 
     const connectWebSocket = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}`;
-      console.log('[KaamDost] Connecting to Real-Time WebSocket at:', wsUrl);
+      if (!isMounted) return;
 
-      const socket = new WebSocket(wsUrl);
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+      let socket: WebSocket;
+      try {
+        socket = new WebSocket(wsUrl);
+      } catch {
+        scheduleReconnect();
+        return;
+      }
       wsRef.current = socket;
 
       socket.onopen = () => {
-        console.log('[KaamDost] Connected to Real-Time Bus');
+        if (!isMounted) {
+          socket.close();
+          return;
+        }
+        reconnectAttempts = 0;
         setIsConnectedWs(true);
 
         // Automatically sync pending Service Cache items upon socket connection
@@ -365,20 +399,37 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
       };
 
       socket.onclose = () => {
-        console.log('[KaamDost] WebSocket closed. Auto-reconnecting in 2s...');
+        if (!isMounted) return;
         setIsConnectedWs(false);
-        reconnectTimeout = setTimeout(connectWebSocket, 2000);
+        scheduleReconnect();
       };
 
-      socket.onerror = (err) => {
-        console.warn('[KaamDost] WebSocket issue:', err);
+      socket.onerror = () => {
+        // Silently handled via onclose reconnection logic
       };
+    };
+
+    const scheduleReconnect = () => {
+      if (!isMounted) return;
+      clearTimeout(reconnectTimeout);
+      const delay = Math.min(2000 * Math.pow(1.3, reconnectAttempts), 8000);
+      reconnectAttempts++;
+      reconnectTimeout = setTimeout(connectWebSocket, delay);
     };
 
     connectWebSocket();
 
+    // Fallback polling every 8s when WebSocket is temporarily disconnected
+    pollingInterval = setInterval(() => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+        hydrateFromRest();
+      }
+    }, 8000);
+
     return () => {
+      isMounted = false;
       clearTimeout(reconnectTimeout);
+      clearInterval(pollingInterval);
       if (wsRef.current) {
         wsRef.current.close();
       }
