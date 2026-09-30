@@ -17,6 +17,7 @@ import {
 import { ChatScreen } from '../customer/CustomerTrackingAndModals';
 import { WorkerEarningsChart } from './WorkerEarningsChart';
 import { ServiceCacheBanner } from './ServiceCacheBanner';
+import { QuickPayWallet } from './QuickPayWallet';
 import {
   Power,
   Navigation,
@@ -51,6 +52,7 @@ import {
   Zap,
   Send,
   ChevronRight,
+  QrCode,
 } from 'lucide-react';
 
 export type WorkerTab =
@@ -363,6 +365,20 @@ export const WorkerApp: React.FC<{
               <span>{workerOnline ? 'Duty: ONLINE' : 'Duty: OFFLINE'}</span>
             </StatefulButton>
 
+            {/* Quick Pay Digital Wallet & QR Code Shortcut Button */}
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
+                setTab('EARNINGS');
+              }}
+              className="px-2.5 py-2 rounded-full bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+              title="Quick Pay Digital Wallet & Offline QR"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Quick Pay</span>
+            </button>
+
             <button
               type="button"
               onClick={() => {
@@ -384,14 +400,23 @@ export const WorkerApp: React.FC<{
 
         {/* Quick Stats */}
         <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-800/90 text-center">
-          <div>
-            <span className="text-[11px] text-slate-400 block">
-              Net Earnings
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
+              setTab('EARNINGS');
+            }}
+            className="cursor-pointer hover:opacity-85 transition text-center"
+            title="Open Quick Pay Digital Wallet"
+          >
+            <span className="text-[11px] text-slate-400 block flex items-center justify-center gap-1">
+              <span>Quick Pay</span>
+              <Zap className="w-2.5 h-2.5 text-amber-400" />
             </span>
             <span className="text-sm font-extrabold text-emerald-400 tabular-nums">
               ₹{netTakeHome}
             </span>
-          </div>
+          </button>
           <div className="border-x border-slate-800">
             <span className="text-[11px] text-slate-400 block">
               Partner Rating
@@ -1195,25 +1220,34 @@ export const WorkerApp: React.FC<{
         </div>
       )}
 
-      {/* TAB 3: EARNINGS & COMMISSION BREAKDOWN */}
+      {/* TAB 3: EARNINGS & QUICK PAY WALLET */}
       {tab === 'EARNINGS' && (
         <div className="p-5 space-y-4">
-          <div className="bg-[#0F172A] text-white rounded-3xl p-5 space-y-4 shadow-md">
+          {/* Quick Pay Digital Wallet & Offline QR Payments */}
+          <QuickPayWallet
+            activeWorker={activeWorker}
+            netTakeHome={netTakeHome}
+            grossEarnings={grossEarnings}
+            incentiveBonus={incentiveBonus}
+          />
+
+          {/* Platform Commission & GST Transparency Breakdown */}
+          <div className="bg-[#0F172A] text-white rounded-3xl p-5 space-y-3 border border-slate-800 shadow-md">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-[11px] font-bold text-slate-400 uppercase">
-                  Withdrawable Partner Balance
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  Partner Settlement Policy
                 </span>
-                <h2 className="text-2xl font-extrabold text-emerald-400 tabular-nums mt-0.5">
-                  ₹{netTakeHome}
-                </h2>
+                <h4 className="text-sm font-bold text-white mt-0.5">
+                  100% Transparent Fee Structure
+                </h4>
               </div>
-              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold">
-                Zero Delay UPI
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
+                Flat 10% Platform Fee
               </span>
             </div>
 
-            <div className="bg-slate-800/90 rounded-2xl p-3.5 space-y-2 text-xs">
+            <div className="bg-slate-800/80 rounded-2xl p-3.5 space-y-2 text-xs">
               <div className="flex justify-between text-slate-300">
                 <span>Gross Service & Spare Part Earnings</span>
                 <span className="font-bold text-white tabular-nums">
@@ -1233,29 +1267,12 @@ export const WorkerApp: React.FC<{
                 </span>
               </div>
               <div className="flex justify-between text-white font-extrabold text-sm pt-2 border-t border-slate-700">
-                <span>Net Take-Home Payout</span>
+                <span>Net Take-Home Credited to Quick Pay Wallet</span>
                 <span className="tabular-nums text-emerald-400">
                   ₹{netTakeHome}
                 </span>
               </div>
             </div>
-
-            <StatefulButton
-              variant="emerald"
-              loadingText="Transferring via IMPS/UPI..."
-              successText="Credited to Bank!"
-              className="w-full py-3.5 rounded-2xl text-xs font-bold"
-              onClick={() => {
-                triggerHaptic(HAPTIC_PATTERNS.SUCCESS);
-                showToast(
-                  `₹${netTakeHome} Transferred Instantly`,
-                  `${activeWorker.name} • HDFC Bank ****4821 (UPI)`
-                );
-              }}
-            >
-              <IndianRupee className="w-4 h-4" />
-              <span>Instant Withdraw ₹{netTakeHome} to Bank / UPI</span>
-            </StatefulButton>
           </div>
 
           {/* Daily Earnings Trend Progression Chart (Recharts) */}
