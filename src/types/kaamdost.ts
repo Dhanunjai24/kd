@@ -121,6 +121,7 @@ export interface ChatMessage {
   sender: 'CUSTOMER' | 'WORKER';
   text: string;
   timestamp: string;
+  isCachedOffline?: boolean;
 }
 
 export interface Booking {

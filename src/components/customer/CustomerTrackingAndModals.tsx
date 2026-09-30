@@ -1625,7 +1625,18 @@ export const ChatScreen: React.FC<ChatScreenProps> = ({
                   }`}
                 >
                   <span>{msg.timestamp}</span>
-                  {isMe && <CheckCircle2 className="w-3 h-3 text-blue-200" />}
+                  {isMe &&
+                    (msg.isCachedOffline ? (
+                      <span
+                        className="flex items-center gap-0.5 text-amber-200 text-[9px] font-medium bg-amber-400/20 px-1 py-0.2 rounded"
+                        title="Stored in local Service Cache · Will auto-sync when online"
+                      >
+                        <Clock className="w-2.5 h-2.5 animate-pulse" />
+                        <span>Cached</span>
+                      </span>
+                    ) : (
+                      <CheckCircle2 className="w-3 h-3 text-blue-200" />
+                    ))}
                 </div>
               </div>
             </div>

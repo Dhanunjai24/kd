@@ -16,6 +16,7 @@ import {
 } from '../ui/StateSystem';
 import { ChatScreen } from '../customer/CustomerTrackingAndModals';
 import { WorkerEarningsChart } from './WorkerEarningsChart';
+import { ServiceCacheBanner } from './ServiceCacheBanner';
 import {
   Power,
   Navigation,
@@ -288,7 +289,8 @@ export const WorkerApp: React.FC<{
   // 2. CHAT SCREEN
   if (tab === 'CHAT' && currentJob) {
     return (
-      <div className="relative min-h-[820px] bg-[#F7F9FD]">
+      <div className="relative min-h-[820px] bg-[#F7F9FD] flex flex-col">
+        <ServiceCacheBanner />
         <ChatScreen
           booking={currentJob}
           senderRole="WORKER"
@@ -301,6 +303,9 @@ export const WorkerApp: React.FC<{
 
   return (
     <div className="w-full bg-[#F7F9FD] min-h-[820px] flex flex-col relative pb-28">
+      {/* Service Cache & Offline Connectivity Banner */}
+      <ServiceCacheBanner />
+
       {/* Worker Header with Online/Offline Toggle */}
       <header className="px-5 pt-5 pb-3.5 bg-[#0F172A] text-white rounded-b-3xl shadow-md">
         <div className="flex items-center justify-between">

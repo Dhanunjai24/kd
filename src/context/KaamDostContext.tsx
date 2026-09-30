@@ -16,6 +16,16 @@ import {
 } from '../data/initialData';
 import { triggerHaptic, HAPTIC_PATTERNS } from '../utils/haptics';
 import { isTopRecommended100Match } from '../utils/jobRanking';
+import {
+  getServiceCache,
+  enqueueServiceCacheItem,
+  syncPendingServiceCache,
+  clearAllServiceCache,
+  removeCacheItem,
+  isOfflineModeSimulated,
+  setOfflineModeSimulated,
+  ServiceCacheItem,
+} from '../utils/serviceCache';
 
 export interface ToastItem {
   id: string;
@@ -36,6 +46,15 @@ interface KaamDostContextType {
   setActiveWorkerId: (id: string) => void;
   activeWorker: WorkerProfile;
   isConnectedWs: boolean;
+  isOnlineEffective: boolean;
+  isOfflineSimulated: boolean;
+  setOfflineSimulated: (simulated: boolean) => void;
+  toggleOfflineSimulation: () => void;
+  serviceCacheItems: ServiceCacheItem[];
+  pendingCacheCount: number;
+  syncServiceCacheNow: () => { syncedCount: number; failedCount: number; syncedItems: ServiceCacheItem[] };
+  clearAllServiceCache: () => void;
+  removeCacheItem: (id: string) => void;
   updateWorkerProfile: (updates: Partial<WorkerProfile>) => void;
   toggleBookmarkWorker: (workerId: string) => void;
   createBooking: (params: {
@@ -110,12 +129,26 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
   const [workerOnline, setWorkerOnlineState] = useState<boolean>(true);
   const [activeWorkerId, setActiveWorkerId] = useState<string>('worker-1');
   const [isConnectedWs, setIsConnectedWs] = useState<boolean>(false);
+  const [isNetworkOnline, setIsNetworkOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [isOfflineSimulated, setIsOfflineSimulated] = useState<boolean>(() =>
+    isOfflineModeSimulated()
+  );
+  const [serviceCacheItems, setServiceCacheItems] = useState<ServiceCacheItem[]>(() =>
+    getServiceCache()
+  );
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [uiDemoState, setUiDemoState] = useState<
     'normal' | 'skeleton' | 'empty' | 'error'
   >('normal');
 
   const wsRef = useRef<WebSocket | null>(null);
+
+  const isOnlineEffective = isNetworkOnline && !isOfflineSimulated && isConnectedWs;
+  const pendingCacheCount = serviceCacheItems.filter(
+    (i) => i.status === 'QUEUED' || i.status === 'FAILED'
+  ).length;
 
   const activeWorker =
     workers.find((w) => w.id === activeWorkerId) || workers[0];
@@ -157,6 +190,30 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
       socket.onopen = () => {
         console.log('[KaamDost] Connected to Real-Time Bus');
         setIsConnectedWs(true);
+
+        // Automatically sync pending Service Cache items upon socket connection
+        if (!isOfflineModeSimulated()) {
+          setTimeout(() => {
+            const pending = getServiceCache().filter(
+              (i) => i.status === 'QUEUED' || i.status === 'FAILED'
+            );
+            if (pending.length > 0) {
+              const res = syncPendingServiceCache((type, payload) => {
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.send(JSON.stringify({ type, payload }));
+                }
+              });
+              if (res.syncedCount > 0) {
+                showToast(
+                  `⚡ Service Cache Synced (${res.syncedCount})`,
+                  'Cached offline updates restored and delivered to WebSocket bus.',
+                  'success'
+                );
+                triggerHaptic(HAPTIC_PATTERNS.SUCCESS);
+              }
+            }
+          }, 350);
+        }
       };
 
       socket.onmessage = (event) => {
@@ -328,6 +385,95 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, []);
 
+  // Browser Network and Service Cache Event Listeners
+  useEffect(() => {
+    const handleOnline = () => {
+      console.log('[KaamDost] Browser online event detected');
+      setIsNetworkOnline(true);
+    };
+    const handleOffline = () => {
+      console.log('[KaamDost] Browser offline event detected');
+      setIsNetworkOnline(false);
+    };
+    const handleCacheUpdate = (e: any) => {
+      if (e?.detail?.items) {
+        setServiceCacheItems(e.detail.items);
+      } else {
+        setServiceCacheItems(getServiceCache());
+      }
+    };
+    const handleSimUpdate = (e: any) => {
+      setIsOfflineSimulated(e?.detail?.isOfflineSimulated ?? isOfflineModeSimulated());
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('kaamdost:service-cache-updated', handleCacheUpdate);
+    window.addEventListener('kaamdost:network-simulation-changed', handleSimUpdate);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('kaamdost:service-cache-updated', handleCacheUpdate);
+      window.removeEventListener('kaamdost:network-simulation-changed', handleSimUpdate);
+    };
+  }, []);
+
+  // Automatic Reconnection Sync Effect: flushes pending items whenever connection is restored
+  const prevOnlineEffectiveRef = useRef(isOnlineEffective);
+  useEffect(() => {
+    if (isOnlineEffective && pendingCacheCount > 0) {
+      console.log(
+        `[KaamDost] Connection active. Automatically syncing ${pendingCacheCount} Service Cache items...`
+      );
+      const timer = setTimeout(() => {
+        const result = syncPendingServiceCache((type, payload) => {
+          sendWs(type, payload);
+        });
+        setServiceCacheItems(getServiceCache());
+        if (result.syncedCount > 0) {
+          showToast(
+            `⚡ Service Cache Synced (${result.syncedCount})`,
+            'Pending status updates & messages delivered to WebSocket bus.',
+            'success'
+          );
+          triggerHaptic(HAPTIC_PATTERNS.SUCCESS);
+        }
+      }, 400);
+
+      return () => clearTimeout(timer);
+    }
+    prevOnlineEffectiveRef.current = isOnlineEffective;
+  }, [isOnlineEffective, pendingCacheCount]);
+
+  const setOfflineSimulated = (simulated: boolean) => {
+    setIsOfflineSimulated(simulated);
+    setOfflineModeSimulated(simulated);
+  };
+
+  const toggleOfflineSimulation = () => {
+    const next = !isOfflineSimulated;
+    setIsOfflineSimulated(next);
+    setOfflineModeSimulated(next);
+    triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
+    showToast(
+      next ? 'Basement / Offline Mode Active' : 'Online Mode Restored',
+      next
+        ? 'Simulating zero network in underground parking. Updates will be saved to Service Cache.'
+        : 'Network reconnected. Auto-syncing queued actions...',
+      next ? 'warning' : 'success'
+    );
+  };
+
+  const syncServiceCacheNow = () => {
+    if (!isOnlineEffective) {
+      return { syncedCount: 0, failedCount: 0, syncedItems: [] };
+    }
+    const result = syncPendingServiceCache(sendWs);
+    setServiceCacheItems(getServiceCache());
+    return result;
+  };
+
   const setWorkerOnline = (online: boolean) => {
     setWorkerOnlineState(online);
     sendWs('worker:duty', { online });
@@ -438,11 +584,12 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
   };
 
   const updateBookingStatus = (bookingId: string, status: BookingStatus) => {
+    // Optimistic local update so UI responds instantly
     setBookings((prev) =>
       prev.map((b) => (b.id === bookingId ? { ...b, status } : b))
     );
-    sendWs('booking:status', { bookingId, status });
 
+    const targetJob = bookings.find((b) => b.id === bookingId);
     const labelMap: Record<BookingStatus, string> = {
       REQUESTED: 'Booking Requested',
       ACCEPTED: 'Worker Accepted Job & Assigned',
@@ -453,9 +600,35 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
       PAID: 'Payment Settled & GST Invoice Generated',
       CANCELLED: 'Booking Cancelled',
     };
+    const statusLabel = labelMap[status];
+
+    // Check if offline (or simulated offline or WebSocket disconnected)
+    if (!isOnlineEffective) {
+      enqueueServiceCacheItem({
+        type: 'STATUS_UPDATE',
+        bookingId,
+        bookingTitle: targetJob?.serviceTitle || `Booking #${bookingId}`,
+        payload: {
+          bookingId,
+          status,
+          statusLabel,
+          updatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      });
+
+      showToast(
+        'Offline: Stored in Service Cache',
+        `Status '${status.replace('_', ' ')}' saved in localStorage. Will auto-sync when online.`,
+        'warning'
+      );
+      triggerHaptic(HAPTIC_PATTERNS.WARNING);
+      return;
+    }
+
+    sendWs('booking:status', { bookingId, status });
 
     showToast(
-      labelMap[status],
+      statusLabel,
       `Booking #${bookingId} synced in real-time between apps`,
       status === 'CANCELLED' ? 'warning' : 'success'
     );
@@ -506,6 +679,27 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
       })
     );
 
+    const targetJob = bookings.find((b) => b.id === bookingId);
+
+    if (!isOnlineEffective) {
+      enqueueServiceCacheItem({
+        type: 'EXTRA_WORK_REQUEST',
+        bookingId,
+        bookingTitle: targetJob?.serviceTitle || `Booking #${bookingId}`,
+        payload: {
+          bookingId,
+          extraItem,
+        },
+      });
+
+      showToast(
+        'Offline: Approval Request Cached',
+        `Spare part request saved in localStorage. Will broadcast once reconnected.`,
+        'warning'
+      );
+      return;
+    }
+
     sendWs('extra:request', { bookingId, extraItem });
 
     showToast(
@@ -553,11 +747,14 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
       minute: '2-digit',
     });
 
+    const isOffline = !isOnlineEffective;
+
     const message: ChatMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
       sender,
       text: text.trim(),
       timestamp: now,
+      isCachedOffline: isOffline,
     };
 
     setBookings((prev) =>
@@ -570,6 +767,28 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
           : b
       )
     );
+
+    const targetJob = bookings.find((b) => b.id === bookingId);
+
+    if (isOffline) {
+      enqueueServiceCacheItem({
+        type: 'CHAT_MESSAGE',
+        bookingId,
+        bookingTitle: targetJob?.serviceTitle || `Booking #${bookingId}`,
+        payload: {
+          bookingId,
+          message,
+        },
+      });
+
+      showToast(
+        'Offline: Message Queued in Cache',
+        `Stored locally. Will auto-sync to WebSocket once connected.`,
+        'warning'
+      );
+      triggerHaptic(HAPTIC_PATTERNS.LIGHT_TAP);
+      return;
+    }
 
     sendWs('chat:send', { bookingId, message });
   };
@@ -709,6 +928,15 @@ export const KaamDostProvider: React.FC<{ children: React.ReactNode }> = ({
         setActiveWorkerId,
         activeWorker,
         isConnectedWs,
+        isOnlineEffective,
+        isOfflineSimulated,
+        setOfflineSimulated,
+        toggleOfflineSimulation,
+        serviceCacheItems,
+        pendingCacheCount,
+        syncServiceCacheNow,
+        clearAllServiceCache,
+        removeCacheItem,
         updateWorkerProfile,
         toggleBookmarkWorker,
         createBooking,
