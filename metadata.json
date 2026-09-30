@@ -1,0 +1,6 @@
+{
+  "name": "KaamDost — Trusted Home Services & Partner Platform",
+  "description": "Modern Indian home services marketplace connecting customers with verified local plumbers, electricians, carpenters, cleaners, and tradespeople with upfront ₹ pricing, live tracking, and real-time worker workflow.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
