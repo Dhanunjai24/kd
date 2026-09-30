@@ -18,6 +18,26 @@ import {
 
 type ViewMode = 'CUSTOMER' | 'WORKER' | 'DUAL_SYNC';
 
+function getInitialViewMode(): ViewMode {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const roleParam = params.get('role') || params.get('app') || params.get('view');
+    if (roleParam === 'customer') return 'CUSTOMER';
+    if (roleParam === 'worker') return 'WORKER';
+    if (roleParam === 'dual' || roleParam === 'split') return 'DUAL_SYNC';
+    const globalRole = (window as any).APP_ROLE;
+    if (globalRole === 'customer') return 'CUSTOMER';
+    if (globalRole === 'worker') return 'WORKER';
+    // Default to DUAL_SYNC on desktop screens, or CUSTOMER on small mobile screens
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return 'CUSTOMER';
+    }
+  } catch {
+    // fallback safe
+  }
+  return 'DUAL_SYNC';
+}
+
 const KaamDostShell: React.FC = () => {
   const {
     toasts,
@@ -28,7 +48,7 @@ const KaamDostShell: React.FC = () => {
     isConnectedWs,
   } = useKaamDost();
 
-  const [viewMode, setViewMode] = useState<ViewMode>('DUAL_SYNC');
+  const [viewMode, setViewMode] = useState<ViewMode>(getInitialViewMode);
   const [showStateBar, setShowStateBar] = useState<boolean>(false);
 
   return (

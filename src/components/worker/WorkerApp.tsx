@@ -241,8 +241,8 @@ export const WorkerApp: React.FC<{
                     onClick={() => setEditTrade(t)}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
                       editTrade === t
-                        ? 'bg-amber-500 text-slate-950'
-                        : 'bg-slate-900 text-slate-300 border border-slate-700'
+                        ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
+                        : 'glass-service-card text-slate-800 hover:text-slate-950'
                     }`}
                   >
                     {t}
@@ -522,7 +522,7 @@ export const WorkerApp: React.FC<{
 
                   {/* Worker Live Score Factor Metrics */}
                   <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-50">
-                    <div className="bg-slate-50 rounded-2xl p-2.5 text-center">
+                    <div className="glass-service-card rounded-2xl p-2.5 text-center">
                       <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-500">
                         <MapPin className="w-3 h-3 text-blue-500" />
                         <span>Distance</span>
@@ -533,7 +533,7 @@ export const WorkerApp: React.FC<{
                       <span className="text-[9px] text-slate-400">40% weight</span>
                     </div>
 
-                    <div className="bg-slate-50 rounded-2xl p-2.5 text-center">
+                    <div className="glass-service-card rounded-2xl p-2.5 text-center">
                       <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-500">
                         <Star className="w-3 h-3 text-amber-500 fill-amber-500" />
                         <span>Rating</span>
@@ -544,7 +544,7 @@ export const WorkerApp: React.FC<{
                       <span className="text-[9px] text-slate-400">35% weight</span>
                     </div>
 
-                    <div className="bg-slate-50 rounded-2xl p-2.5 text-center">
+                    <div className="glass-service-card rounded-2xl p-2.5 text-center">
                       <div className="flex items-center justify-center gap-1 text-[10px] font-bold text-slate-500">
                         <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                         <span>Success</span>
@@ -640,7 +640,7 @@ export const WorkerApp: React.FC<{
                       return (
                         <div
                           key={job.id}
-                          className="bg-white rounded-3xl p-4 border-2 border-slate-100 hover:border-blue-200 shadow-xs space-y-3 transition"
+                          className="glass-booking-card glass-booking-card-hover rounded-3xl p-4 space-y-3 transition"
                         >
                           {/* Top Badges: Algorithm Match Badge & Distance Pill */}
                           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -873,7 +873,7 @@ export const WorkerApp: React.FC<{
                       setSelectedJobId(job.id);
                       setTab('ACTIVE_JOB');
                     }}
-                    className="bg-white rounded-3xl p-4 border border-slate-100 shadow-xs space-y-3 cursor-pointer hover:border-blue-300 transition mb-3"
+                    className="glass-booking-card glass-booking-card-hover rounded-3xl p-4 space-y-3 cursor-pointer transition mb-3"
                   >
                     <div className="flex items-start justify-between">
                       <div>
@@ -910,7 +910,7 @@ export const WorkerApp: React.FC<{
       {/* TAB 2: ACTIVE JOB EXECUTION */}
       {tab === 'ACTIVE_JOB' && currentJob && (
         <div className="p-5 space-y-4">
-          <div className="bg-white rounded-3xl p-4 border border-slate-100 shadow-xs space-y-3">
+          <div className="glass-booking-card rounded-3xl p-4 space-y-3">
             <div className="flex items-center justify-between">
               <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold">
                 Job #{currentJob.id} • {currentJob.status.replace('_', ' ')}
@@ -1038,7 +1038,7 @@ export const WorkerApp: React.FC<{
           </div>
 
           {/* STEP-BY-STEP WORKFLOW */}
-          <div className="bg-white rounded-3xl p-5 border border-slate-100 shadow-xs space-y-4">
+          <div className="glass-booking-card rounded-3xl p-5 space-y-4">
             <h3 className="text-sm font-bold text-slate-900">
               Service Execution Controls
             </h3>
@@ -1304,7 +1304,7 @@ export const WorkerApp: React.FC<{
                   setSelectedJobId(b.id);
                   setTab('ACTIVE_JOB');
                 }}
-                className="bg-white rounded-2xl p-4 border border-slate-100 flex items-center justify-between cursor-pointer hover:border-blue-200 transition"
+                className="glass-booking-card glass-booking-card-hover rounded-2xl p-4 flex items-center justify-between cursor-pointer transition"
               >
                 <div>
                   <span className="text-[10px] font-bold text-slate-400">
@@ -1374,13 +1374,13 @@ export const WorkerApp: React.FC<{
               </button>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-3 rounded-2xl bg-slate-50">
+              <div className="p-3 rounded-2xl glass-service-card">
                 <span className="text-slate-400 block text-[11px]">
                   Trade Category
                 </span>
                 <strong className="text-slate-900">{activeWorker.trade}</strong>
               </div>
-              <div className="p-3 rounded-2xl bg-slate-50">
+              <div className="p-3 rounded-2xl glass-service-card">
                 <span className="text-slate-400 block text-[11px]">
                   Base Visit Fee
                 </span>
@@ -1675,7 +1675,7 @@ const WorkerBottomNav: React.FC<{
   return (
     <nav
       aria-label="Worker Bottom Navigation"
-      className="sticky bottom-4 left-0 right-0 mx-auto w-[92%] max-w-[380px] bg-[#0F172A]/95 backdrop-blur-md text-white rounded-full px-3 py-2 z-40 flex items-center justify-between shadow-xl border border-slate-700"
+      className="sticky bottom-4 left-0 right-0 mx-auto w-[92%] max-w-[380px] glass-dock-worker rounded-full px-3 py-2 z-40 flex items-center justify-between"
     >
       {items.map((item) => {
         const active = activeTab === item.id;
@@ -1689,8 +1689,8 @@ const WorkerBottomNav: React.FC<{
             }}
             className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-full transition cursor-pointer ${
               active
-                ? 'bg-amber-500 text-slate-950 font-bold'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/25'
+                : 'text-slate-600 hover:text-slate-950'
             }`}
           >
             {item.icon}

@@ -584,7 +584,7 @@ export const CustomerApp: React.FC<{
                 className={`whitespace-nowrap px-5 py-2.5 rounded-full font-medium text-sm transition-all cursor-pointer ${
                   isActive
                     ? 'bg-[#38A7F8] text-white shadow-xs px-6'
-                    : 'bg-white border border-slate-100 text-slate-600 hover:text-slate-900'
+                    : 'glass-service-card text-slate-700 hover:text-slate-950'
                 }`}
               >
                 {tab.label}
@@ -612,7 +612,7 @@ export const CustomerApp: React.FC<{
             filteredWorkers.map((worker) => (
               <article
                 key={worker.id}
-                className="bg-white rounded-3xl p-4 shadow-[0_8px_24px_-4px_rgba(149,157,165,0.12)] border border-slate-100/80 transition-all duration-300"
+                className="glass-booking-card glass-booking-card-hover rounded-3xl p-4 transition-all duration-300"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3.5">
@@ -779,7 +779,7 @@ export const CustomerApp: React.FC<{
                   setActiveBookingId(b.id);
                   setScreen('BOOKING_TRACKER');
                 }}
-                className="bg-white rounded-3xl p-4 border border-slate-100 shadow-xs space-y-3 cursor-pointer hover:border-blue-200 transition"
+                className="glass-booking-card glass-booking-card-hover rounded-3xl p-4 space-y-3 cursor-pointer transition"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -1137,7 +1137,7 @@ export const CustomerApp: React.FC<{
               setActiveBookingId(bookings[0].id);
               setScreen('BOOKING_TRACKER');
             }}
-            className="w-full p-3 rounded-2xl bg-amber-50 border border-amber-200/90 flex items-center justify-between text-left shadow-2xs hover:bg-amber-100/70 transition cursor-pointer"
+            className="w-full p-3.5 rounded-2xl glass-booking-card glass-booking-card-hover flex items-center justify-between text-left transition cursor-pointer"
           >
             <div className="flex items-center gap-2.5">
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
@@ -1331,7 +1331,7 @@ export const CustomerApp: React.FC<{
               onClick={() => handleCategorySwitch(cat.filterKey, true)}
               className="group flex flex-col items-center focus:outline-none cursor-pointer"
             >
-              <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-2xs flex items-center justify-center group-active:scale-95 transition-all group-hover:border-blue-200">
+              <div className="w-16 h-16 rounded-2xl glass-service-card glass-service-card-hover flex items-center justify-center group-active:scale-95 transition-all">
                 <span className={`text-2xl ${cat.iconColorClass}`}>
                   <i className={cat.iconClass} />
                 </span>
@@ -1378,7 +1378,7 @@ export const CustomerApp: React.FC<{
             {filteredWorkers.slice(0, 2).map((worker) => (
               <article
                 key={worker.id}
-                className="bg-white rounded-2xl p-4 border border-slate-100 shadow-2xs flex flex-col gap-3.5"
+                className="glass-booking-card glass-booking-card-hover rounded-2xl p-4 flex flex-col gap-3.5"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">

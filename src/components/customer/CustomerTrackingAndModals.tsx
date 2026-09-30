@@ -445,7 +445,7 @@ export const LiveBookingTracker: React.FC<LiveBookingTrackerProps> = ({
       </div>
 
       {/* Simulated Live GPS Tracking Banner */}
-      <div className="mx-5 mt-4 rounded-3xl overflow-hidden bg-white border border-slate-100 shadow-xs">
+      <div className="mx-5 mt-4 rounded-3xl overflow-hidden glass-booking-card">
         <div className="relative h-36 bg-gradient-to-r from-[#DBEAFE] via-[#EFF6FF] to-[#E0F2FE] p-4 flex flex-col justify-between">
           <div
             className="absolute inset-0 opacity-30 pointer-events-none"
@@ -581,7 +581,7 @@ export const LiveBookingTracker: React.FC<LiveBookingTrackerProps> = ({
 
       {/* REAL-TIME ADDITIONAL WORK APPROVAL PROMPT (SOCKET SYNCED) */}
       {pendingExtras.length > 0 && (
-        <div className="mx-5 mt-4 bg-amber-50/95 rounded-3xl p-4 border-2 border-amber-300 shadow-sm space-y-3">
+        <div className="mx-5 mt-4 glass-booking-card rounded-3xl p-4 border border-amber-300/80 shadow-sm space-y-3">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
@@ -646,7 +646,7 @@ export const LiveBookingTracker: React.FC<LiveBookingTrackerProps> = ({
       )}
 
       {/* Live Status Timeline */}
-      <div className="mx-5 mt-4 bg-white rounded-3xl p-5 border border-slate-100 shadow-xs">
+      <div className="mx-5 mt-4 glass-booking-card rounded-3xl p-5 space-y-4">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-sm font-bold text-slate-900">
             Live Service Timeline
@@ -721,7 +721,7 @@ export const LiveBookingTracker: React.FC<LiveBookingTrackerProps> = ({
       </div>
 
       {/* UPI Payment & Transparent Bill Settlement Card */}
-      <div className="mx-5 mt-4 bg-white rounded-3xl p-5 border border-slate-100 shadow-xs space-y-4">
+      <div className="mx-5 mt-4 glass-booking-card rounded-3xl p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900">
             Transparent Bill & UPI Payment
